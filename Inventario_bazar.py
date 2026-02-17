@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Bazar Familiar - Control de Ventas", layout="wide")
 
-# --- BASE DE DATOS ---
+# --- BASE DE DATOS (Usamos 'bazar_final.db' para evitar el error de la imagen) ---
 def init_db():
-    conn = sqlite3.connect("bazar_v3.db")
+    conn = sqlite3.connect("bazar_final.db")
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventario (
@@ -33,32 +33,32 @@ def init_db():
     conn.commit()
     conn.close()
 
+def borrar_producto(id_prod):
+    conn = sqlite3.connect("bazar_final.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM inventario WHERE id = ?", (id_prod,))
+    conn.commit()
+    conn.close()
+
 init_db()
 
 # --- FUNCIONES DE AYUDA ---
 def registrar_venta(id_prod, nombre_prod, p_venta, p_costo):
-    conn = sqlite3.connect("bazar_v3.db")
+    conn = sqlite3.connect("bazar_final.db")
     cursor = conn.cursor()
     ganancia = p_venta - p_costo
+    # Hora de Bolivia
     hora_actual = datetime.now() - timedelta(hours=4) 
     fecha_formateada = hora_actual.strftime("%d/%m %H:%M")
     
-    # 1. Registrar en el historial permanente
+    # Guardar en historial
     cursor.execute("""
         INSERT INTO ventas (nombre_producto, cantidad, fecha, ganancia_vta, total_vta) 
         VALUES (?, ?, ?, ?, ?)
     """, (nombre_prod, 1, fecha_formateada, ganancia, p_venta))
     
-    # 2. Sumar una venta al contador específico de este producto en el inventario
+    # Actualizar contador de stock individual
     cursor.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (id_prod,))
-    
-    conn.commit()
-    conn.close()
-
-def borrar_producto(id_prod):
-    conn = sqlite3.connect("bazar_v3.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM inventario WHERE id = ?", (id_prod,))
     conn.commit()
     conn.close()
 
@@ -72,7 +72,7 @@ with st.sidebar:
     
     if st.button("Guardar en Inventario"):
         if nuevo_nombre:
-            conn = sqlite3.connect("bazar_v3.db")
+            conn = sqlite3.connect("bazar_final.db")
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO inventario (producto, stock_inicial, precio_costo, precio_venta, ventas_acumuladas) 
@@ -84,21 +84,8 @@ with st.sidebar:
             st.rerun()
 
 # --- OBTENCIÓN DE DATOS ---
-conn = sqlite3.connect("bazar_v3.db")
-# Intentar leer la columna nueva por si acaso no existe en la DB vieja
-try:
-    df_inv = pd.read_sql_query("SELECT * FROM inventario", conn)
-except:
-    # Si da error porque falta la columna ventas_acumuladas, borramos y recreamos
-    conn.close()
-    conn = sqlite3.connect("bazar_v3.db")
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS inventario")
-    conn.commit()
-    conn.close()
-    init_db()
-    st.rerun()
-
+conn = sqlite3.connect("bazar_final.db")
+df_inv = pd.read_sql_query("SELECT * FROM inventario", conn)
 df_vts = pd.read_sql_query("SELECT nombre_producto, cantidad, fecha, ganancia_vta, total_vta FROM ventas", conn)
 conn.close()
 
@@ -113,7 +100,7 @@ with col1:
         st.info("Agrega productos para comenzar.")
     else:
         for index, row in df_inv.iterrows():
-            # EL CAMBIO ESTÁ AQUÍ: El stock ahora se resta solo de sus propias ventas
+            # Lógica corregida: El stock es independiente para cada vez que creas el producto
             stock_actual = row['stock_inicial'] - row['ventas_acumuladas']
             
             c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
@@ -139,12 +126,13 @@ with col2:
     ganancia_total = df_vts['ganancia_vta'].sum()
     st.metric("Ganancia Total", f"{ganancia_total:.2f} Bs")
     
-    with st.expander("📝 Historial Detallado", expanded=True):
+    with st.expander("📝 Historial (Numerado desde 1)", expanded=True):
         if not df_vts.empty:
             df_mostrar = df_vts[['fecha', 'nombre_producto', 'total_vta', 'ganancia_vta']].copy()
+            # Esta línea hace que el contador inicie en 1
             df_mostrar.index = range(1, len(df_mostrar) + 1)
             st.table(df_mostrar.rename(
                 columns={'nombre_producto': 'Producto', 'total_vta': 'Venta', 'ganancia_vta': 'Ganancia'}
             ))
         else:
-            st.write("No hay ventas.")
+            st.write("No hay ventas registradas.")
