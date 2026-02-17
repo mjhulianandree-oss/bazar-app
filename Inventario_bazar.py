@@ -4,13 +4,23 @@ import sqlite3
 import os
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Bazar Master Pro v37", layout="wide")
+# --- 1. CONFIGURACIÓN VISUAL (TODO EN BLANCO) ---
+st.set_page_config(page_title="Bazar Master Pro v38", layout="wide")
 
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
     [data-testid="stHeader"] {display:none !important;}
+    
+    /* Fondo oscuro general */
+    .stApp { background-color: #0E1117; }
+
+    /* Forzar color blanco en TODO el texto */
+    html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, span, label {
+        color: #FFFFFF !important;
+    }
+
+    /* Estilo para los inputs */
     input, .stSelectbox div[data-baseweb="select"], .stSelectbox div[data-baseweb="select"] > div {
         background-color: #262730 !important;
         color: #FFFFFF !important;
@@ -18,15 +28,28 @@ st.markdown("""
         border: 1px solid #4a4a4a !important;
         border-radius: 5px !important;
         font-weight: 700 !important;
-        font-size: 16px !important;
     }
-    svg[title="open"] { fill: #FF4B4B !important; width: 22px !important; }
-    label p { color: #000000 !important; font-weight: bold !important; }
+
+    /* Estilo para métricas */
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
+        color: #FFFFFF !important;
+    }
+
+    /* Estilo para tablas */
+    .stTable td, .stTable th {
+        color: #FFFFFF !important;
+    }
+
+    /* Icono de selectbox */
+    svg[title="open"] { fill: #FFFFFF !important; width: 22px !important; }
+    
+    /* Separadores */
+    hr { border-color: #4a4a4a !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_pro_v37.db"
+DB_NAME = "bazar_pro_v38.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -60,7 +83,6 @@ def get_data():
 
 df_inv, df_vts, df_hst, estado_abierto = get_data()
 abierto = True if estado_abierto == 1 else False
-# Fecha y Hora para los registros
 ahora = (datetime.now() - timedelta(hours=4)).strftime("%d/%m %H:%M")
 
 # --- 3. CABECERA ---
@@ -129,7 +151,6 @@ with col_izq:
                     else:
                         c_c.error("Agotado")
                 
-                # --- RESUMEN POR SECCIÓN (PARTE INFERIOR DE CADA TAB) ---
                 st.markdown("---")
                 df_vts_cat = df_vts[df_vts['categoria'] == cat]
                 if not df_vts_cat.empty:
@@ -137,8 +158,6 @@ with col_izq:
                     m1.metric("Ventas", f"{int(df_vts_cat['cantidad'].sum())}")
                     m2.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
                     m3.metric("Caja", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
-                else:
-                    st.info(f"Sin ventas en {cat}")
 
 with col_der:
     st.subheader("💰 Resumen Total")
@@ -148,8 +167,6 @@ with col_der:
     st.write("---")
     st.subheader("📜 Actividad General")
     
-    # --- UNIFICAR VENTAS Y EVENTOS DE TIENDA ---
-    # Preparamos los datos de ventas para que coincidan con el historial
     if not df_vts.empty:
         vts_log = df_vts[['fecha', 'nombre_producto', 'total_vta']].copy()
         vts_log.columns = ['Hora', 'Detalle', 'Monto']
@@ -163,11 +180,7 @@ with col_der:
     else:
         hst_log = pd.DataFrame(columns=['Hora', 'Detalle', 'Monto'])
         
-    # Combinamos ambos
     log_completo = pd.concat([vts_log, hst_log]).sort_index(ascending=False)
     
     if not log_completo.empty:
-        # Formateamos para que se vea como tabla de registro
         st.table(log_completo.head(12))
-    else:
-        st.write("No hay actividad registrada.")
