@@ -5,51 +5,33 @@ import os
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURACIÓN VISUAL (TODO EN BLANCO) ---
-st.set_page_config(page_title="Bazar Master Pro v38", layout="wide")
+st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
     [data-testid="stHeader"] {display:none !important;}
-    
-    /* Fondo oscuro general */
     .stApp { background-color: #0E1117; }
-
-    /* Forzar color blanco en TODO el texto */
     html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, span, label {
         color: #FFFFFF !important;
     }
-
-    /* Estilo para los inputs */
     input, .stSelectbox div[data-baseweb="select"], .stSelectbox div[data-baseweb="select"] > div {
         background-color: #262730 !important;
         color: #FFFFFF !important;
         -webkit-text-fill-color: #FFFFFF !important;
         border: 1px solid #4a4a4a !important;
         border-radius: 5px !important;
-        font-weight: 700 !important;
     }
-
-    /* Estilo para métricas */
-    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"], .stTable td, .stTable th {
         color: #FFFFFF !important;
     }
-
-    /* Estilo para tablas */
-    .stTable td, .stTable th {
-        color: #FFFFFF !important;
-    }
-
-    /* Icono de selectbox */
     svg[title="open"] { fill: #FFFFFF !important; width: 22px !important; }
-    
-    /* Separadores */
     hr { border-color: #4a4a4a !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_pro_v38.db"
+# --- 2. BASE DE DATOS (NUEVA VERSIÓN LIMPIA) ---
+DB_NAME = "bazar_final_v1.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -57,14 +39,11 @@ def init_db():
     cursor.execute("""CREATE TABLE IF NOT EXISTS inventario (
         id INTEGER PRIMARY KEY AUTOINCREMENT, producto TEXT UNIQUE, categoria TEXT, 
         stock_inicial INTEGER, precio_costo REAL, precio_venta REAL, ventas_acumuladas INTEGER DEFAULT 0)""")
-    
     cursor.execute("""CREATE TABLE IF NOT EXISTS ventas (
         id INTEGER PRIMARY KEY AUTOINCREMENT, nombre_producto TEXT, categoria TEXT,
         cantidad INTEGER, fecha TEXT, ganancia_vta REAL, total_vta REAL)""")
-    
     cursor.execute("""CREATE TABLE IF NOT EXISTS historial_tienda (
         id INTEGER PRIMARY KEY AUTOINCREMENT, evento TEXT, hora TEXT)""")
-    
     cursor.execute("CREATE TABLE IF NOT EXISTS estado_tienda (id INTEGER PRIMARY KEY, abierto INTEGER)")
     cursor.execute("INSERT OR IGNORE INTO estado_tienda (id, abierto) VALUES (1, 0)")
     conn.commit()
@@ -91,14 +70,12 @@ col1, col2 = st.columns([1, 2])
 with col1:
     if abierto:
         if st.button("🔒 CERRAR TIENDA", use_container_width=True, type="primary"):
-            conn = sqlite3.connect(DB_NAME)
-            conn.execute("UPDATE estado_tienda SET abierto = 0 WHERE id = 1")
+            conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE estado_tienda SET abierto = 0 WHERE id = 1")
             conn.execute("INSERT INTO historial_tienda (evento, hora) VALUES (?,?)", ("CERRADO 🔒", ahora))
             conn.commit(); conn.close(); st.rerun()
     else:
         if st.button("🔓 ABRIR TIENDA", use_container_width=True):
-            conn = sqlite3.connect(DB_NAME)
-            conn.execute("UPDATE estado_tienda SET abierto = 1 WHERE id = 1")
+            conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE estado_tienda SET abierto = 1 WHERE id = 1")
             conn.execute("INSERT INTO historial_tienda (evento, hora) VALUES (?,?)", ("ABIERTO 🔓", ahora))
             conn.commit(); conn.close(); st.rerun()
 with col2:
@@ -106,23 +83,29 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (Sidebar) ---
+# --- 4. REGISTRO (USANDO FORMULARIO PARA EVITAR REPETICIÓN) ---
 with st.sidebar:
     st.header("📦 Registro")
-    reg_nom = st.text_input("Nombre", key="n")
-    reg_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
-    reg_stk = st.number_input("Stock Inicial", min_value=0, value=10)
-    reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0)
-    reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5)
-    
-    if st.button("💾 GUARDAR", use_container_width=True):
-        if reg_nom:
-            try:
-                conn = sqlite3.connect(DB_NAME)
-                conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
-                             (reg_nom.strip().upper(), reg_cat, reg_stk, reg_cst, reg_vta))
-                conn.commit(); conn.close(); st.rerun()
-            except: st.error("Ya existe.")
+    with st.form("form_registro", clear_on_submit=True):
+        reg_nom = st.text_input("Nombre del Producto")
+        reg_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
+        reg_stk = st.number_input("Stock Inicial", min_value=0, value=10)
+        reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0)
+        reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5)
+        btn_guardar = st.form_submit_button("💾 GUARDAR", use_container_width=True)
+        
+        if btn_guardar:
+            if reg_nom:
+                nombre_limpio = reg_nom.strip().upper()
+                try:
+                    conn = sqlite3.connect(DB_NAME)
+                    conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
+                                 (nombre_limpio, reg_cat, reg_stk, reg_cst, reg_vta))
+                    conn.commit(); conn.close()
+                    st.success("Guardado!")
+                    st.rerun()
+                except sqlite3.IntegrityError:
+                    st.error("Ese producto ya existe en la lista.")
 
 # --- 5. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
@@ -140,7 +123,6 @@ with col_izq:
                     c_a, c_b, c_c = st.columns([3, 1.5, 2])
                     c_a.write(f"**{row['producto']}**")
                     c_b.write(f"Stock: {int(disp)}")
-                    
                     if disp > 0:
                         if c_c.button(f"Venta {row['precio_venta']} Bs", key=f"v_{row['id']}", disabled=not abierto):
                             conn = sqlite3.connect(DB_NAME)
@@ -148,8 +130,7 @@ with col_izq:
                                          (row['producto'], row['categoria'], ahora, row['precio_venta']-row['precio_costo'], row['precio_venta']))
                             conn.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (row['id'],))
                             conn.commit(); conn.close(); st.rerun()
-                    else:
-                        c_c.error("Agotado")
+                    else: st.error("Agotado")
                 
                 st.markdown("---")
                 df_vts_cat = df_vts[df_vts['categoria'] == cat]
@@ -163,24 +144,14 @@ with col_der:
     st.subheader("💰 Resumen Total")
     total_caja = df_vts['total_vta'].sum() if not df_vts.empty else 0.0
     st.metric("Caja General Hoy", f"{total_caja:.2f} Bs")
-    
     st.write("---")
     st.subheader("📜 Actividad General")
     
-    if not df_vts.empty:
-        vts_log = df_vts[['fecha', 'nombre_producto', 'total_vta']].copy()
-        vts_log.columns = ['Hora', 'Detalle', 'Monto']
-    else:
-        vts_log = pd.DataFrame(columns=['Hora', 'Detalle', 'Monto'])
-        
-    if not df_hst.empty:
-        hst_log = df_hst[['hora', 'evento']].copy()
-        hst_log['Monto'] = 0.0
-        hst_log.columns = ['Hora', 'Detalle', 'Monto']
-    else:
-        hst_log = pd.DataFrame(columns=['Hora', 'Detalle', 'Monto'])
-        
-    log_completo = pd.concat([vts_log, hst_log]).sort_index(ascending=False)
+    vts_log = df_vts[['fecha', 'nombre_producto', 'total_vta']].copy() if not df_vts.empty else pd.DataFrame(columns=['fecha', 'nombre_producto', 'total_vta'])
+    vts_log.columns = ['Hora', 'Detalle', 'Monto']
+    hst_log = df_hst[['hora', 'evento']].copy() if not df_hst.empty else pd.DataFrame(columns=['hora', 'evento'])
+    hst_log['Monto'] = 0.0
+    hst_log.columns = ['Hora', 'Detalle', 'Monto']
     
-    if not log_completo.empty:
-        st.table(log_completo.head(12))
+    log_completo = pd.concat([vts_log, hst_log]).sort_index(ascending=False)
+    if not log_completo.empty: st.table(log_completo.head(15))
