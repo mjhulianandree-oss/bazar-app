@@ -29,8 +29,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v54_final.db"
+# --- 2. BASE DE DATOS (NUEVA PARA EMPEZAR DE 0) ---
+DB_NAME = "bazar_final_PROD.db"
 CATEGORIAS = ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"]
 
 def init_db():
@@ -84,7 +84,7 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (VALORES EN 0) ---
+# --- 4. REGISTRO (VALORES INICIALES EN 0) ---
 with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
@@ -97,7 +97,7 @@ with st.sidebar:
             if reg_nom:
                 nombre_up = reg_nom.strip().upper()
                 conn = sqlite3.connect(DB_NAME)
-                # PARCHE 2: VERIFICAR SI EXISTE
+                # PARCHE 2: VERIFICAR SI EXISTE (PARA EVITAR ERRORES)
                 existe = conn.execute("SELECT 1 FROM inventario WHERE producto = ?", (nombre_up,)).fetchone()
                 if not existe:
                     conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
@@ -182,6 +182,6 @@ with col_der:
     st.write("---")
     st.subheader("📜 Actividad")
     if not df_act.empty:
-        # PARCHE 1: SIN ÍNDICE
+        # PARCHE 1: ACTIVIDAD LIMPIA SIN ÍNDICE
         st.dataframe(df_act, use_container_width=True, hide_index=True)
     else: st.write("Sin actividad.")
