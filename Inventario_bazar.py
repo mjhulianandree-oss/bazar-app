@@ -6,44 +6,46 @@ from datetime import datetime, timedelta
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
-# --- 2. BLINDAJE VISUAL TOTAL (UNIFICADO) ---
+# --- 2. BLINDAJE VISUAL Y COHERENCIA DE COLOR BLANCO ---
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
     [data-testid="stHeader"] {display:none !important;}
     
-    /* UNIFICACIÓN DE CASILLAS: Inputs de texto, números y SELECCIÓN */
-    input, .stSelectbox div[data-baseweb="select"] {
+    /* FORZAR FONDO BLANCO EN TODAS LAS CASILLAS */
+    input, 
+    .stSelectbox div[data-baseweb="select"],
+    .stSelectbox div[data-baseweb="select"] > div {
         color: #000000 !important;
-        background-color: #F0F2F6 !important; /* Gris claro uniforme */
+        background-color: #FFFFFF !important; /* Blanco puro */
         border: 2px solid #d1d1d1 !important;
         border-radius: 5px !important;
         min-height: 45px !important;
     }
 
     /* Estilo cuando se hace click o se escribe (Foco) */
-    input:focus, .stSelectbox div[data-baseweb="select"]:focus-within {
+    input:focus, 
+    .stSelectbox div[data-baseweb="select"]:focus-within {
         border-color: #ff4b4b !important;
         background-color: #ffffff !important;
         box-shadow: 0 0 10px rgba(255, 75, 75, 0.5) !important;
     }
 
-    /* Forzar texto negro en la selección */
+    /* Asegurar que el texto dentro de la Sección sea negro y visible */
     .stSelectbox div[data-baseweb="select"] div {
         color: #000000 !important;
         font-weight: 500 !important;
     }
-
-    /* Limpieza de autocompletado */
-    input:-webkit-autofill {
-        -webkit-text-fill-color: #000000 !important;
-        -webkit-box-shadow: 0 0 0px 1000px #F0F2F6 inset !important;
+    
+    /* Eliminar cualquier sombra o degradado que ponga el navegador */
+    .stSelectbox div[role="button"] {
+        background-color: transparent !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. BASE DE DATOS (V19) ---
-DB_NAME = "bazar_v19_final.db"
+# --- 3. BASE DE DATOS (V20) ---
+DB_NAME = "bazar_v20_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -99,11 +101,10 @@ with c2:
 
 st.divider()
 
-# --- 5. REGISTRO RÁPIDO (Sidebar con estilo unificado) ---
+# --- 5. REGISTRO RÁPIDO (Todo Blanco) ---
 with st.sidebar:
     st.header("📦 Registro de Producto")
     
-    # Todos estos campos ahora se verán iguales
     reg_nom = st.text_input("Nombre del Producto", key="input_nom", autocomplete="off")
     reg_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
     reg_stk = st.number_input("Stock Inicial", min_value=0, value=10)
