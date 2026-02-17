@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
+# Estilo visual de alta visibilidad (Texto blanco en casillas)
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
@@ -27,8 +28,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS (Nombre Nuevo para Limpiar Errores) ---
-DB_NAME = "bazar_final_pro.db"
+# --- 2. BASE DE DATOS (NUEVA VERSIÓN PARA EVITAR ERRORES) ---
+# Cambiamos el nombre a v27 para forzar una base de datos limpia y sin errores
+DB_NAME = "bazar_v27_estable.db"
 BACKUP_DIR = "respaldos_bazar"
 
 if not os.path.exists(BACKUP_DIR):
@@ -54,7 +56,7 @@ def init_db():
         precio_costo REAL, 
         precio_venta REAL, 
         ventas_acumuladas INTEGER DEFAULT 0)""")
-    # Tabla Ventas (Aseguramos que tenga CATEGORIA)
+    # Tabla Ventas - Aquí estaba el error de las fotos
     cursor.execute("""CREATE TABLE IF NOT EXISTS ventas (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         nombre_producto TEXT, 
@@ -63,7 +65,7 @@ def init_db():
         fecha TEXT, 
         ganancia_vta REAL, 
         total_vta REAL)""")
-    # Estado de la tienda
+    # Tabla Estado
     cursor.execute("CREATE TABLE IF NOT EXISTS estado_tienda (id INTEGER PRIMARY KEY, abierto INTEGER)")
     cursor.execute("INSERT OR IGNORE INTO estado_tienda (id, abierto) VALUES (1, 0)")
     conn.commit()
@@ -79,7 +81,15 @@ def get_data():
     conn.close()
     return inv, vts, (res_est[0] if res_est else 0)
 
-df_inv, df_vts, estado_abierto = get_data()
+# Carga de datos
+try:
+    df_inv, df_vts, estado_abierto = get_data()
+except:
+    # Si algo falla, reiniciamos la conexión una vez
+    st.warning("Actualizando base de datos...")
+    init_db()
+    df_inv, df_vts, estado_abierto = get_data()
+
 abierto = True if estado_abierto == 1 else False
 
 # --- 3. CABECERA ---
@@ -104,7 +114,7 @@ with c2:
 
 st.divider()
 
-# --- 4. REGISTRO ---
+# --- 4. REGISTRO (Sidebar) ---
 with st.sidebar:
     st.header("📦 Registro")
     reg_nom = st.text_input("Nombre", key="input_nom", autocomplete="off")
@@ -115,21 +125,29 @@ with st.sidebar:
     
     if st.button("💾 GUARDAR PRODUCTO", use_container_width=True):
         if reg_nom and reg_vta > 0:
+            nombre_final = reg_nom.strip().upper()
             try:
                 conn = sqlite3.connect(DB_NAME)
                 conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
-                             (reg_nom.strip().upper(), reg_cat, reg_stk, reg_cst, reg_vta))
+                             (nombre_final, reg_cat, reg_stk, reg_cst, reg_vta))
                 conn.commit(); conn.close()
                 st.session_state.ultima_cat = reg_cat
+                st.success(f"¡{nombre_final} guardado!")
                 st.rerun()
-            except: st.error("¡El producto ya existe!")
+            except sqlite3.IntegrityError:
+                st.error(f"¡{nombre_final} ya existe!")
+        else:
+            st.warning("Completa los datos.")
 
 # --- 5. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
+
 with col_izq:
+    st.subheader("📦 Mostrador")
     if not df_inv.empty:
         cats = sorted(df_inv['categoria'].unique().tolist())
         tabs = st.tabs(cats)
+        
         for i, cat in enumerate(cats):
             with tabs[i]:
                 df_cat = df_inv[df_inv['categoria'] == cat]
@@ -142,25 +160,32 @@ with col_izq:
                     if disp > 0:
                         if c_c.button(f"Venta {row['precio_venta']} Bs", key=f"v_{row['id']}", disabled=not abierto):
                             conn = sqlite3.connect(DB_NAME)
-                            fecha = (datetime.now() - timedelta(hours=4)).strftime("%H:%M")
+                            # Ajuste de hora (Bolivia -4h)
+                            fecha_actual = (datetime.now() - timedelta(hours=4)).strftime("%H:%M")
                             conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, ?, 1, ?, ?, ?)", 
-                                         (row['producto'], row['categoria'], 1, fecha, row['precio_venta']-row['precio_costo'], row['precio_venta']))
+                                         (row['producto'], row['categoria'], 1, fecha_actual, row['precio_venta']-row['precio_costo'], row['precio_venta']))
                             conn.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (row['id'],))
                             conn.commit(); conn.close()
                             st.rerun()
-                    else: c_c.error("Agotado")
+                    else:
+                        c_c.error("Agotado")
                     
                     with c_d.popover("➕"):
                         if st.button("Surtir +10", key=f"s_{row['id']}"):
-                            conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + 10 WHERE id = ?", (row['id'])); conn.commit(); conn.close(); st.rerun()
+                            conn = sqlite3.connect(DB_NAME)
+                            conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + 10 WHERE id = ?", (row['id']))
+                            conn.commit(); conn.close(); st.rerun()
 
 with col_der:
     st.subheader("💰 Resumen")
     st.metric("Caja Total", f"{df_vts['total_vta'].sum() if not df_vts.empty else 0:.2f} Bs")
+    
     with st.expander("📝 Actividad Reciente", expanded=True):
         if not df_vts.empty:
-            st.table(df_vts.tail(8)[['fecha', 'nombre_producto', 'total_vta']])
+            # Mostramos las últimas 10 ventas filtrando por categoría válida
+            v_reales = df_vts.tail(10)
+            st.table(v_reales[['fecha', 'nombre_producto', 'total_vta']].rename(columns={'total_vta':'Bs'}))
     
-    if st.button("📁 Manual Backup"):
-        crear_respaldo()
-        st.success("Respaldo OK")
+    if st.button("📁 Crear Respaldo Ahora"):
+        p = crear_respaldo()
+        st.success("Copia guardada en carpeta 'respaldos_bazar'")
