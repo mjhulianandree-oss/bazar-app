@@ -3,7 +3,7 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURACIÓN VISUAL ---
+# --- 1. CONFIGURACIÓN VISUAL (ESTRUCTURA MANTENIDA) ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
 st.markdown("""
@@ -20,7 +20,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v42_estable.db"
+DB_NAME = "bazar_v43_fijo.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -72,7 +72,7 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (Sidebar con Actualización Instantánea) ---
+# --- 4. REGISTRO (SOLUCIÓN AL ERROR "YA EXISTE") ---
 with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
@@ -81,16 +81,25 @@ with st.sidebar:
         reg_stk = st.number_input("Stock Inicial", min_value=0, value=10)
         reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0)
         reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5)
-        if st.form_submit_button("💾 GUARDAR", use_container_width=True):
+        
+        btn_guardar = st.form_submit_button("💾 GUARDAR", use_container_width=True)
+        
+        if btn_guardar:
             if reg_nom:
                 nombre_up = reg_nom.strip().upper()
-                try:
-                    conn = sqlite3.connect(DB_NAME)
+                conn = sqlite3.connect(DB_NAME)
+                # Verificamos manualmente antes de insertar
+                existe = conn.execute("SELECT 1 FROM inventario WHERE producto = ?", (nombre_up,)).fetchone()
+                if not existe:
                     conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
                                  (nombre_up, reg_cat, reg_stk, reg_cst, reg_vta))
-                    conn.commit(); conn.close()
-                    st.rerun() # <--- ESTO ACTUALIZA LA LISTA AL INSTANTE
-                except: st.error("Ese producto ya existe.")
+                    conn.commit()
+                    conn.close()
+                    # Rerun inmediato para limpiar el estado del formulario y actualizar la lista
+                    st.rerun()
+                else:
+                    conn.close()
+                    st.warning(f"'{nombre_up}' ya está en inventario.")
 
 # --- 5. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
