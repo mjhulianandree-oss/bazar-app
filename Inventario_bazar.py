@@ -3,21 +3,25 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURACIÓN ---
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
+# --- 2. BLINDAJE VISUAL ---
 st.markdown("""
     <style>
-    #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stAppDeployButton {display:none !important;}
     [data-testid="stHeader"] {display:none !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS (Versión 9 - Limpia) ---
+# --- 3. BASE DE DATOS (Actualizada con UNIQUE) ---
 def init_db():
-    conn = sqlite3.connect("bazar_final_v9.db")
+    conn = sqlite3.connect("bazar_master_v7.db")
     cursor = conn.cursor()
-    # Inventario con nombre único para evitar duplicados
+    # Agregamos UNIQUE al producto para que la base de datos no acepte repetidos
     cursor.execute("""CREATE TABLE IF NOT EXISTS inventario (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         producto TEXT UNIQUE, 
@@ -26,7 +30,6 @@ def init_db():
         precio_costo REAL, 
         precio_venta REAL, 
         ventas_acumuladas INTEGER DEFAULT 0)""")
-    # Ventas con columna de categoría para el resumen inferior
     cursor.execute("""CREATE TABLE IF NOT EXISTS ventas (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         nombre_producto TEXT, 
@@ -41,16 +44,32 @@ def init_db():
     conn.close()
 
 def registrar_evento(mensaje):
-    conn = sqlite3.connect("bazar_final_v9.db")
+    conn = sqlite3.connect("bazar_master_v7.db")
     hora = (datetime.now() - timedelta(hours=4)).strftime("%d/%m %H:%M")
     conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, 'SISTEMA', 0, ?, 0, 0)", (mensaje, hora))
     conn.commit()
     conn.close()
 
+def cambiar_estado(abrir):
+    conn = sqlite3.connect("bazar_master_v7.db")
+    conn.execute("UPDATE estado_tienda SET abierto = ? WHERE id = 1", (1 if abrir else 0,))
+    conn.commit()
+    conn.close()
+    registrar_evento("🟢 TIENDA ABIERTA" if abrir else "🔴 TIENDA CERRADA")
+
+def registrar_venta(id_prod, nombre_prod, cat, p_venta, p_costo):
+    conn = sqlite3.connect("bazar_master_v7.db")
+    ganancia = p_venta - p_costo
+    fecha = (datetime.now() - timedelta(hours=4)).strftime("%d/%m %H:%M")
+    conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, ?, 1, ?, ?, ?)", (nombre_prod, cat, fecha, ganancia, p_venta))
+    conn.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (id_prod,))
+    conn.commit()
+    conn.close()
+
 init_db()
 
-# --- 3. CARGA DE DATOS ---
-conn = sqlite3.connect("bazar_final_v9.db")
+# --- 4. CARGA DE DATOS ---
+conn = sqlite3.connect("bazar_master_v7.db")
 df_inv = pd.read_sql_query("SELECT * FROM inventario", conn)
 df_vts = pd.read_sql_query("SELECT * FROM ventas ORDER BY id ASC", conn)
 estado_actual = conn.execute("SELECT abierto FROM estado_tienda WHERE id = 1").fetchone()[0]
@@ -58,114 +77,117 @@ conn.close()
 
 abierto = True if estado_actual == 1 else False
 
-# --- 4. INTERFAZ SUPERIOR ---
+# --- 5. CABECERA ---
 st.title("🏪 Bazar Master Pro")
-c1, c2 = st.columns([1, 2])
-with c1:
+c_btn, c_info = st.columns([1, 2])
+with c_btn:
     if abierto:
         if st.button("🔒 CERRAR TIENDA", use_container_width=True, type="primary"):
-            conn = sqlite3.connect("bazar_final_v9.db")
-            conn.execute("UPDATE estado_tienda SET abierto = 0 WHERE id = 1")
-            conn.commit(); conn.close()
-            registrar_evento("🔴 TIENDA CERRADA")
-            st.rerun()
+            cambiar_estado(False); st.rerun()
     else:
         if st.button("🔓 ABRIR TIENDA", use_container_width=True):
-            conn = sqlite3.connect("bazar_final_v9.db")
-            conn.execute("UPDATE estado_tienda SET abierto = 1 WHERE id = 1")
-            conn.commit(); conn.close()
-            registrar_evento("🟢 TIENDA ABIERTA")
-            st.rerun()
-with c2:
-    st.subheader("🟢 Activo" if abierto else "⚠️ Cerrado")
+            cambiar_estado(True); st.rerun()
+with c_info:
+    st.subheader("✅ Sistema Activo" if abierto else "⚠️ Sistema Cerrado")
 
 st.divider()
 
-# --- 5. REGISTRO (A la izquierda) ---
+# --- 6. SIDEBAR (Con validación de duplicados) ---
 with st.sidebar:
-    st.header("📦 Registro de Productos")
-    with st.form("registro_form", clear_on_submit=True):
-        n_nom = st.text_input("Nombre")
-        n_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
-        n_stk = st.number_input("Stock", min_value=1, value=10)
-        n_cst = st.number_input("Costo (Bs)", min_value=0.0, step=0.1)
-        n_vta = st.number_input("Venta (Bs)", min_value=0.0, step=0.1)
-        
-        if st.form_submit_button("Guardar"):
-            if n_nom:
-                try:
-                    conn = sqlite3.connect("bazar_final_v9.db")
-                    conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
-                                 (n_nom, n_cat, n_stk, n_cst, n_vta))
-                    conn.commit(); conn.close()
-                    st.session_state.cat_foco = n_cat # Para saltar a la pestaña
-                    st.rerun()
-                except:
-                    st.error("Ese producto ya existe.")
+    st.header("📦 Registro")
+    n_nom = st.text_input("Nombre")
+    n_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
+    n_stk = st.number_input("Stock", min_value=1, value=10)
+    n_cst = st.number_input("Costo unitario", min_value=0.1, value=1.0)
+    n_vta = st.number_input("Venta unitario", min_value=0.1, value=1.5)
+    
+    if st.button("Guardar"):
+        if n_nom:
+            # Quitamos espacios de más y pasamos a mayúsculas para comparar mejor
+            nombre_limpio = n_nom.strip()
+            try:
+                conn = sqlite3.connect("bazar_master_v7.db")
+                conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
+                             (nombre_limpio, n_cat, n_stk, n_cst, n_vta))
+                conn.commit()
+                conn.close()
+                st.success(f"✅ {nombre_limpio} guardado.")
+                st.rerun()
+            except sqlite3.IntegrityError:
+                # Si el nombre ya existe, salta este error
+                st.warning(f"⚠️ El producto '{nombre_limpio}' ya existe en el inventario.")
+                conn.close()
 
-# --- 6. MOSTRADOR Y RESUMEN ---
-col_izq, col_der = st.columns([2, 1.3])
+# --- 7. MOSTRADOR ---
+c_inv, c_res = st.columns([2, 1.3])
 
-with col_izq:
+with c_inv:
     st.subheader("📦 Mostrador")
     if not df_inv.empty:
-        cats = df_inv['categoria'].unique().tolist()
-        # Salto automático a la pestaña del producto guardado
-        idx_tab = cats.index(st.session_state.cat_foco) if 'cat_foco' in st.session_state and st.session_state.cat_foco in cats else 0
-        tabs = st.tabs(cats)
-        
-        for i, cat in enumerate(cats):
+        tabs = st.tabs(df_inv['categoria'].unique().tolist())
+        for i, cat in enumerate(df_inv['categoria'].unique().tolist()):
             with tabs[i]:
                 df_cat = df_inv[df_inv['categoria'] == cat]
                 for _, row in df_cat.iterrows():
-                    disp = row['stock_inicial'] - row['ventas_acumuladas']
-                    c_a, c_b, c_c, c_d = st.columns([3, 1.5, 2, 1])
-                    c_a.write(f"**{row['producto']}**")
-                    c_b.write(f"Disp: {int(disp)}")
-                    if disp > 0:
-                        if c_c.button(f"Venta {row['precio_venta']} Bs", key=f"v_{row['id']}", disabled=not abierto):
-                            conn = sqlite3.connect("bazar_final_v9.db")
-                            fecha = (datetime.now() - timedelta(hours=4)).strftime("%H:%M (%d/%m)")
-                            conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, ?, 1, ?, ?, ?)", 
-                                         (row['producto'], row['categoria'], fecha, row['precio_venta']-row['precio_costo'], row['precio_venta']))
-                            conn.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (row['id'],))
-                            conn.commit(); conn.close(); st.rerun()
-                    else: c_c.error("Agotado")
-                    with c_d.popover("➕"):
-                        if st.button("Surtir +10", key=f"s_{row['id']}"):
-                            conn = sqlite3.connect("bazar_final_v9.db")
-                            conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + 10 WHERE id = ?", (row['id'],))
+                    stk = row['stock_inicial'] - row['ventas_acumuladas']
+                    col1, col2, col3, col4 = st.columns([3, 1.5, 2, 1])
+                    col1.write(f"**{row['producto']}**")
+                    col2.write(f"Disp: {int(stk)}")
+                    if stk > 0:
+                        if col3.button(f"Venta {row['precio_venta']} Bs", key=f"v_{row['id']}", disabled=not abierto):
+                            registrar_venta(row['id'], row['producto'], row['categoria'], row['precio_venta'], row['precio_costo'])
+                            st.rerun()
+                    else: col3.error("Agotado")
+                    with col4.popover("➕"):
+                        cant = st.number_input("Surtir", min_value=1, value=10, key=f"s_{row['id']}")
+                        if st.button("Ok", key=f"bs_{row['id']}"):
+                            conn = sqlite3.connect("bazar_master_v7.db")
+                            conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + ? WHERE id = ?", (cant, row['id']))
                             conn.commit(); conn.close(); st.rerun()
 
-with col_der:
-    st.subheader("💰 Resumen")
+with c_res:
+    st.subheader("💰 Resumen de Caja")
     m1, m2 = st.columns(2)
-    m1.metric("Caja", f"{df_vts['total_vta'].sum():.2f}")
-    m2.metric("Ganancia", f"{df_vts['ganancia_vta'].sum():.2f}")
+    m1.metric("En Caja", f"{df_vts['total_vta'].sum():.2f} Bs")
+    m2.metric("Ganancia", f"{df_vts['ganancia_vta'].sum():.2f} Bs")
     
-    with st.expander("📝 Actividad", expanded=True):
+    with st.expander("📝 Diario de Actividad", expanded=True):
         if not df_vts.empty:
-            hist = []
-            cont = 0
-            for _, v in df_vts.iterrows():
-                if v['categoria'] != 'SISTEMA':
-                    cont += 1
-                    n = str(cont)
-                else: n = "-"
-                hist.append({"N°": n, "Hora": v['fecha'], "Detalle": v['nombre_producto'], "Bs": v['total_vta']})
-            
-            # ELIMINACIÓN DE ÍNDICE EXTRA:
-            st.table(pd.DataFrame(hist).set_index("N°"))
+            historial_visual = []
+            contador_productos = 0
+            for _, vta in df_vts.iterrows():
+                if vta['categoria'] != 'SISTEMA':
+                    contador_productos += 1
+                    num_str = f"{contador_productos}"
+                else:
+                    num_str = "-"
+                historial_visual.append({
+                    "N°": num_str,
+                    "Fecha": vta['fecha'],
+                    "Descripción": vta['nombre_producto'],
+                    "Bs": f"{vta['total_vta']:.2f}" if vta['total_vta'] > 0 else ""
+                })
+            st.table(pd.DataFrame(historial_visual).set_index("N°"))
+        else:
+            st.info("Sin actividad.")
 
-# --- 7. CLASIFICACIÓN (Abajo) ---
+# --- 8. RESUMEN POR SECCIONES ---
 st.divider()
-st.subheader("📊 Por Clasificación")
-v_reales = df_vts[df_vts['categoria'] != 'SISTEMA']
-if not v_reales.empty:
-    res = v_reales.groupby('categoria').agg({'total_vta': 'sum', 'ganancia_vta': 'sum'}).reset_index()
-    cols = st.columns(len(res))
-    for i, r in res.iterrows():
-        with cols[i]:
-            st.info(f"**{r['categoria']}**")
-            st.write(f"Caja: {r['total_vta']:.2f}")
-            st.write(f"Gana: {r['ganancia_vta']:.2f}")
+st.subheader("📊 Control por Clasificación")
+v_prods = df_vts[df_vts['categoria'] != 'SISTEMA']
+if not v_prods.empty:
+    resumen_secciones = v_prods.groupby('categoria').agg({
+        'cantidad': 'sum',
+        'total_vta': 'sum',
+        'ganancia_vta': 'sum'
+    }).reset_index()
+    
+    columnas_cat = st.columns(len(resumen_secciones))
+    for i, row_cat in resumen_secciones.iterrows():
+        with columnas_cat[i]:
+            st.info(f"**{row_cat['categoria']}**")
+            st.write(f"Items: {int(row_cat['cantidad'])}")
+            st.write(f"Caja: {row_cat['total_vta']:.2f} Bs")
+            st.write(f"Ganancia: {row_cat['ganancia_vta']:.2f} Bs")
+else:
+    st.write("Aún no hay registros de ventas.")
