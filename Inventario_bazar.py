@@ -20,7 +20,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v47_final.db"
+DB_NAME = "bazar_v48_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -107,11 +107,15 @@ with col_izq:
             with tabs[i]:
                 df_cat = df_inv[df_inv['categoria'] == cat]
                 for _, row in df_cat.iterrows():
+                    # Calculamos stock actual y ventas individuales
                     disp = row['stock_inicial'] - row['ventas_acumuladas']
+                    vta_indiv = row['ventas_acumuladas']
                     
-                    c_a, c_b, c_input, c_btn_add, c_vta = st.columns([2.2, 0.8, 1, 0.7, 1.5])
+                    c_a, c_b, c_input, c_btn_add, c_vta = st.columns([2.5, 0.8, 0.8, 0.6, 1.3])
                     
-                    c_a.write(f"**{row['producto']}**")
+                    # NOMBRE + CONTADOR INDIVIDUAL DE VENTA
+                    c_a.write(f"**{row['producto']}** \n*(Vendidos: {int(vta_indiv)})*")
+                    
                     c_b.write(f"Stk: {int(disp)}")
                     
                     # Sumador masivo de stock
@@ -133,12 +137,12 @@ with col_izq:
                             conn.commit(); conn.close(); st.rerun()
                     else: c_vta.error("Agotado")
                 
-                # --- RESUMEN DE SECCIÓN ACTUALIZADO ---
+                # --- RESUMEN DE SECCIÓN ---
                 st.markdown("---")
                 df_vts_cat = df_vts[df_vts['categoria'] == cat]
                 if not df_vts_cat.empty:
                     m1, m2, m3 = st.columns(3)
-                    m1.metric("Vendido", f"{int(df_vts_cat['cantidad'].sum())} u.")
+                    m1.metric("Vendido Total", f"{int(df_vts_cat['cantidad'].sum())} u.")
                     m2.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
                     m3.metric("Caja", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
 
@@ -147,7 +151,6 @@ with col_der:
     total_caja = df_vts['total_vta'].sum() if not df_vts.empty else 0.0
     total_ganancia = df_vts['ganancia_vta'].sum() if not df_vts.empty else 0.0
     
-    # NUEVA MÉTRICA DE GANANCIA AL LADO DE CAJA GENERAL
     mc1, mc2 = st.columns(2)
     mc1.metric("Caja General", f"{total_caja:.2f} Bs")
     mc2.metric("Ganancia Total", f"{total_ganancia:.2f} Bs")
@@ -155,7 +158,7 @@ with col_der:
     st.write("---")
     st.subheader("📜 Actividad")
     if not df_act.empty:
-        # PARCHE 1 DEFINITIVO: SE OCULTA EL CONTADOR NUMERAL
+        # PARCHE 1: SE OCULTA EL CONTADOR NUMERAL (hide_index=True)
         st.dataframe(df_act, use_container_width=True, hide_index=True)
     else:
         st.write("Sin actividad.")
