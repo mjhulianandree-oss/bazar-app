@@ -20,7 +20,8 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v48_final.db"
+DB_NAME = "bazar_v49_final.db"
+CATEGORIAS = ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"]
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -78,7 +79,7 @@ with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
         reg_nom = st.text_input("Nombre")
-        reg_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
+        reg_cat = st.selectbox("Sección", CATEGORIAS)
         reg_stk = st.number_input("Stock Inicial", min_value=0, value=10)
         reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0)
         reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5)
@@ -93,32 +94,38 @@ with st.sidebar:
                     conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, f"NUEVO: {nombre_up}"))
                     conn.commit(); conn.close(); st.rerun()
                 else:
-                    conn.close()
-                    st.warning(f"'{nombre_up}' ya existe.")
+                    conn.close(); st.warning(f"'{nombre_up}' ya existe.")
 
 # --- 5. MOSTRADOR ---
-col_izq, col_der = st.columns([2.2, 1.2])
+col_izq, col_der = st.columns([2.3, 1.1])
 
 with col_izq:
     st.subheader("🛒 Panel de Ventas")
     if not df_inv.empty:
-        tabs = st.tabs(sorted(df_inv['categoria'].unique()))
-        for i, cat in enumerate(sorted(df_inv['categoria'].unique())):
+        tabs = st.tabs(CATEGORIAS)
+        for i, cat in enumerate(CATEGORIAS):
             with tabs[i]:
                 df_cat = df_inv[df_inv['categoria'] == cat]
                 for _, row in df_cat.iterrows():
-                    # Calculamos stock actual y ventas individuales
                     disp = row['stock_inicial'] - row['ventas_acumuladas']
                     vta_indiv = row['ventas_acumuladas']
                     
-                    c_a, c_b, c_input, c_btn_add, c_vta = st.columns([2.5, 0.8, 0.8, 0.6, 1.3])
+                    # Estructura: Producto/Editar | Stock | Cantidad | Botón+ | Botón Venta
+                    c_a, c_b, c_input, c_btn_add, c_vta = st.columns([2.6, 0.8, 0.7, 0.6, 1.3])
                     
-                    # NOMBRE + CONTADOR INDIVIDUAL DE VENTA
-                    c_a.write(f"**{row['producto']}** \n*(Vendidos: {int(vta_indiv)})*")
+                    # NOMBRE + EDITOR DE CATEGORÍA
+                    with c_a:
+                        st.write(f"**{row['producto']}** (V: {int(vta_indiv)})")
+                        new_cat = st.selectbox("Mover a:", CATEGORIAS, index=CATEGORIAS.index(cat), key=f"edit_{row['id']}", label_visibility="collapsed")
+                        if new_cat != cat:
+                            conn = sqlite3.connect(DB_NAME)
+                            conn.execute("UPDATE inventario SET categoria = ? WHERE id = ?", (new_cat, row['id']))
+                            conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, f"MOVIDO: {row['producto']} a {new_cat}"))
+                            conn.commit(); conn.close(); st.rerun()
                     
                     c_b.write(f"Stk: {int(disp)}")
                     
-                    # Sumador masivo de stock
+                    # Sumador masivo
                     add_val = c_input.number_input("Cant", min_value=1, value=1, key=f"num_{row['id']}", label_visibility="collapsed")
                     
                     if c_btn_add.button("➕", key=f"add_{row['id']}"):
@@ -158,7 +165,7 @@ with col_der:
     st.write("---")
     st.subheader("📜 Actividad")
     if not df_act.empty:
-        # PARCHE 1: SE OCULTA EL CONTADOR NUMERAL (hide_index=True)
+        # PARCHE 1: SE OCULTA EL CONTADOR NUMERAL
         st.dataframe(df_act, use_container_width=True, hide_index=True)
     else:
         st.write("Sin actividad.")
