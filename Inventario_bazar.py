@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Bazar Master Pro", layout="wide")
+st.set_page_config(page_title="Bazar Master Pro v36", layout="wide")
 
 st.markdown("""
     <style>
@@ -25,13 +25,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS (NUEVA Y LIMPIA) ---
-DB_NAME = "bazar_pro_v31.db"
+# --- 2. BASE DE DATOS ---
+DB_NAME = "bazar_pro_v36.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    # Tabla Inventario
     cursor.execute("""CREATE TABLE IF NOT EXISTS inventario (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         producto TEXT UNIQUE, 
@@ -40,7 +39,7 @@ def init_db():
         precio_costo REAL, 
         precio_venta REAL, 
         ventas_acumuladas INTEGER DEFAULT 0)""")
-    # Tabla Ventas (Con todas las columnas que causaban error)
+    
     cursor.execute("""CREATE TABLE IF NOT EXISTS ventas (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         nombre_producto TEXT, 
@@ -49,7 +48,7 @@ def init_db():
         fecha TEXT, 
         ganancia_vta REAL, 
         total_vta REAL)""")
-    # Tabla Estado
+    
     cursor.execute("CREATE TABLE IF NOT EXISTS estado_tienda (id INTEGER PRIMARY KEY, abierto INTEGER)")
     cursor.execute("INSERT OR IGNORE INTO estado_tienda (id, abierto) VALUES (1, 0)")
     conn.commit()
@@ -67,6 +66,7 @@ def get_data():
 
 df_inv, df_vts, estado_abierto = get_data()
 abierto = True if estado_abierto == 1 else False
+hora_vta = (datetime.now() - timedelta(hours=4)).strftime("%H:%M")
 
 # --- 3. CABECERA ---
 st.title("🏪 Bazar Master Pro")
@@ -103,15 +103,17 @@ with st.sidebar:
                 conn.commit(); conn.close(); st.rerun()
             except: st.error("Ese producto ya existe.")
 
-# --- 5. MOSTRADOR ---
+# --- 5. MOSTRADOR SUPERIOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
 
 with col_izq:
+    st.subheader("🛒 Panel de Ventas")
     if not df_inv.empty:
         categorias_existentes = sorted(df_inv['categoria'].unique())
         tabs = st.tabs(categorias_existentes)
         for i, cat in enumerate(categorias_existentes):
             with tabs[i]:
+                # --- BOTONES DE VENTA ---
                 df_cat = df_inv[df_inv['categoria'] == cat]
                 for _, row in df_cat.iterrows():
                     disp = row['stock_inicial'] - row['ventas_acumuladas']
@@ -122,18 +124,35 @@ with col_izq:
                     if disp > 0:
                         if c_c.button(f"Venta {row['precio_venta']} Bs", key=f"v_{row['id']}", disabled=not abierto):
                             conn = sqlite3.connect(DB_NAME)
-                            hora = (datetime.now() - timedelta(hours=4)).strftime("%H:%M")
-                            # ESTA ES LA LÍNEA CRÍTICA: Ahora coincide 100% con la nueva tabla
                             conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, ?, 1, ?, ?, ?)", 
-                                         (row['producto'], row['categoria'], hora, row['precio_venta']-row['precio_costo'], row['precio_venta']))
+                                         (row['producto'], row['categoria'], hora_vta, row['precio_venta']-row['precio_costo'], row['precio_venta']))
                             conn.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (row['id'],))
                             conn.commit(); conn.close(); st.rerun()
                     else:
                         c_c.error("Agotado")
+                
+                # --- HISTORIAL POR SECCIÓN (EN LA PARTE INFERIOR DE CADA PESTAÑA) ---
+                st.markdown("---")
+                st.subheader(f"📊 Resumen de {cat}")
+                
+                # Filtrar ventas solo de esta categoría
+                df_vts_cat = df_vts[df_vts['categoria'] == cat]
+                
+                if not df_vts_cat.empty:
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Cant. Vendida", f"{int(df_vts_cat['cantidad'].sum())}")
+                    m2.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
+                    m3.metric("Caja Sección", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
+                    
+                    st.write("**Últimas ventas de esta sección:**")
+                    st.table(df_vts_cat.tail(5)[['fecha', 'nombre_producto', 'total_vta']].rename(columns={'total_vta':'Bs'}))
+                else:
+                    st.info("Aún no hay ventas en esta sección.")
 
 with col_der:
-    st.subheader("💰 Resumen")
+    st.subheader("💰 Resumen Total")
     total_caja = df_vts['total_vta'].sum() if not df_vts.empty else 0.0
-    st.metric("Caja Hoy", f"{total_caja:.2f} Bs")
+    st.metric("Caja General Hoy", f"{total_caja:.2f} Bs")
     if not df_vts.empty:
-        st.table(df_vts.tail(5)[['fecha', 'nombre_producto', 'total_vta']])
+        st.write("**Actividad General:**")
+        st.table(df_vts.tail(8)[['fecha', 'nombre_producto', 'total_vta']])
