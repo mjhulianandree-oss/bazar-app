@@ -191,3 +191,4 @@ if not v_prods.empty:
             st.write(f"Ganancia: {row_cat['ganancia_vta']:.2f} Bs")
 else:
     st.write("Aún no hay registros de ventas.")
+
