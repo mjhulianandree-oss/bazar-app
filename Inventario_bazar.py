@@ -3,7 +3,7 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURACIÓN VISUAL (ESTRUCTURA MANTENIDA) ---
+# --- 1. CONFIGURACIÓN VISUAL (ESTRUCTURA MANTENIDA + PARCHE SIN INSTRUCCIONES) ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
 st.markdown("""
@@ -13,7 +13,10 @@ st.markdown("""
     .stApp { background-color: #0E1117; }
     html, body, p, h1, h2, h3, h4, span, label, .stMarkdown { color: #FFFFFF !important; }
     
-    /* Parche de Color para Casillas (incluyendo el selectbox) */
+    /* OCULTAR MENSAJE "PRESS ENTER TO APPLY" */
+    .stInstructions { display: none !important; }
+    
+    /* Parche de Color para Casillas */
     input, .stSelectbox div[data-baseweb="select"], .stSelectbox select { 
         background-color: #262730 !important; 
         color: #FFFFFF !important; 
@@ -27,7 +30,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v53_final.db"
+DB_NAME = "bazar_v54_final.db"
 CATEGORIAS = ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"]
 
 def init_db():
@@ -81,7 +84,7 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (VALORES INICIALES EN 0) ---
+# --- 4. REGISTRO (VALORES EN 0) ---
 with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
