@@ -15,12 +15,13 @@ st.markdown("""
     input, .stSelectbox div[data-baseweb="select"] { background-color: #262730 !important; color: #FFFFFF !important; }
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #FFFFFF !important; }
     hr { border-color: #4a4a4a !important; }
+    /* Estilo para tabla limpia */
     [data-testid="stTable"] { color: white !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v41_estable.db"
+# --- 2. BASE DE DATOS (SISTEMA DE LOG UNIFICADO) ---
+DB_NAME = "bazar_v40_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -28,11 +29,14 @@ def init_db():
     cursor.execute("""CREATE TABLE IF NOT EXISTS inventario (
         id INTEGER PRIMARY KEY AUTOINCREMENT, producto TEXT UNIQUE, categoria TEXT, 
         stock_inicial INTEGER, precio_costo REAL, precio_venta REAL, ventas_acumuladas INTEGER DEFAULT 0)""")
+    
     cursor.execute("""CREATE TABLE IF NOT EXISTS ventas (
         id INTEGER PRIMARY KEY AUTOINCREMENT, nombre_producto TEXT, categoria TEXT,
         cantidad INTEGER, fecha TEXT, ganancia_vta REAL, total_vta REAL)""")
+    
     cursor.execute("""CREATE TABLE IF NOT EXISTS log_actividad (
         id INTEGER PRIMARY KEY AUTOINCREMENT, hora TEXT, detalle TEXT)""")
+    
     cursor.execute("CREATE TABLE IF NOT EXISTS estado_tienda (id INTEGER PRIMARY KEY, abierto INTEGER)")
     cursor.execute("INSERT OR IGNORE INTO estado_tienda (id, abierto) VALUES (1, 0)")
     conn.commit()
@@ -74,31 +78,23 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (Sidebar mejorado) ---
+# --- 4. REGISTRO (Sidebar) ---
 with st.sidebar:
     st.header("📦 Registro")
-    with st.form("form_registro", clear_on_submit=True):
+    with st.form("registro_prod", clear_on_submit=True):
         reg_nom = st.text_input("Nombre")
         reg_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
         reg_stk = st.number_input("Stock Inicial", min_value=0, value=10)
         reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0)
         reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5)
-        submitted = st.form_submit_button("💾 GUARDAR", use_container_width=True)
-        
-        if submitted:
+        if st.form_submit_button("💾 GUARDAR", use_container_width=True):
             if reg_nom:
-                nombre_limpio = reg_nom.strip().upper()
-                conn = sqlite3.connect(DB_NAME)
-                # Verificar manualmente antes de intentar insertar para evitar errores de sistema
-                check = conn.execute("SELECT id FROM inventario WHERE producto = ?", (nombre_limpio,)).fetchone()
-                if check:
-                    st.error("Ese producto ya está en la lista.")
-                    conn.close()
-                else:
+                try:
+                    conn = sqlite3.connect(DB_NAME)
                     conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
-                                 (nombre_limpio, reg_cat, reg_stk, reg_cst, reg_vta))
-                    conn.commit(); conn.close()
-                    st.rerun()
+                                 (reg_nom.strip().upper(), reg_cat, reg_stk, reg_cst, reg_vta))
+                    conn.commit(); conn.close(); st.rerun()
+                except: st.error("Ya existe.")
 
 # --- 5. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
@@ -124,7 +120,9 @@ with col_izq:
                             conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora, f"VENTA: {row['producto']}"))
                             conn.commit(); conn.close(); st.rerun()
                     else: st.error("Agotado")
+                
                 # SE ELIMINÓ EL CONTADOR DE ESTA SECCIÓN (GANANCIA/CAJA POR PESTAÑA)
+                st.markdown("---")
 
 with col_der:
     st.subheader("💰 Total Hoy")
