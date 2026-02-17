@@ -6,50 +6,55 @@ from datetime import datetime, timedelta
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
-# --- 2. ESTILO DE ALTA VISIBILIDAD ---
+# --- 2. ESTILO DE ALTO CONTRASTE (TEXTO BLANCO) ---
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
     [data-testid="stHeader"] {display:none !important;}
     
-    /* 1. TEXTO DENTRO DE LAS CASILLAS: Negro intenso y más grueso */
+    /* 1. TEXTO DENTRO DE LAS CASILLAS: Blanco puro y grueso */
     input {
-        color: #000000 !important;
-        font-weight: 600 !important;
-        font-size: 16px !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important; /* Para navegadores basados en Chrome */
+        font-weight: 700 !important;
+        font-size: 18px !important;
     }
 
-    /* 2. TEXTO DE LA SECCIÓN (SELECTBOX) */
+    /* 2. TEXTO DE LA SECCIÓN (SELECTBOX) EN BLANCO */
     .stSelectbox div[data-baseweb="select"] div {
-        color: #000000 !important;
-        font-weight: 600 !important;
-        font-size: 16px !important;
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
     }
 
-    /* 3. LA FLECHITA: Ahora es más grande y de color rojo oscuro para que se note */
+    /* 3. LA FLECHITA: Roja y brillante */
     svg[title="open"] {
         fill: #FF4B4B !important;
-        width: 30px !important;
-        height: 30px !important;
+        width: 25px !important;
+        height: 25px !important;
     }
 
-    /* 4. MEJORAR CONTRASTE DE ETIQUETAS (Los nombres arriba de las casillas) */
+    /* 4. FONDO DE LAS CASILLAS: Un poco más oscuro para que el blanco brille */
+    input, .stSelectbox div[data-baseweb="select"] {
+        background-color: #262730 !important; 
+        border: 2px solid #4a4a4a !important;
+    }
+
+    /* Foco cuando el usuario está escribiendo */
+    input:focus {
+        border-color: #FF4B4B !important;
+        box-shadow: 0 0 8px rgba(255, 75, 75, 1) !important;
+    }
+
+    /* Asegurar que las etiquetas de arriba sigan siendo legibles */
     label p {
         color: #000000 !important;
         font-weight: bold !important;
-        font-size: 15px !important;
-    }
-
-    /* Borde resaltado al hacer click */
-    input:focus {
-        border-color: #FF4B4B !important;
-        box-shadow: 0 0 5px rgba(255, 75, 75, 0.8) !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 3. BASE DE DATOS ---
-DB_NAME = "bazar_v22_final.db"
+DB_NAME = "bazar_v23_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -105,7 +110,7 @@ with c2:
 
 st.divider()
 
-# --- 5. REGISTRO (Sidebar de alta visibilidad) ---
+# --- 5. REGISTRO (Sidebar con Texto Blanco en Inputs) ---
 with st.sidebar:
     st.header("📦 Registro")
     
@@ -115,7 +120,7 @@ with st.sidebar:
     reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0, step=0.1)
     reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5, step=0.1)
     
-    if st.button("💾 GUARDAR PRODUCTO", use_container_width=True, type="secondary"):
+    if st.button("💾 GUARDAR", use_container_width=True):
         if reg_nom and reg_vta > 0:
             nombre_final = reg_nom.strip().upper()
             try:
@@ -128,7 +133,7 @@ with st.sidebar:
             except sqlite3.IntegrityError:
                 st.error(f"¡{nombre_final} ya existe!")
         else:
-            st.warning("Completa los datos.")
+            st.warning("Falta info.")
 
 # --- 6. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
@@ -137,7 +142,6 @@ with col_izq:
     st.subheader("📦 Mostrador")
     if not df_inv.empty:
         cats = sorted(df_inv['categoria'].unique().tolist())
-        idx_tab = cats.index(st.session_state.ultima_cat) if 'ultima_cat' in st.session_state and st.session_state.ultima_cat in cats else 0
         tabs = st.tabs(cats)
         
         for i, cat in enumerate(cats):
