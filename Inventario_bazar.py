@@ -3,7 +3,7 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURACIÓN VISUAL ---
+# --- 1. CONFIGURACIÓN VISUAL (ESTRUCTURA MANTENIDA) ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
 st.markdown("""
@@ -12,15 +12,22 @@ st.markdown("""
     [data-testid="stHeader"] {display:none !important;}
     .stApp { background-color: #0E1117; }
     html, body, p, h1, h2, h3, h4, span, label, .stMarkdown { color: #FFFFFF !important; }
-    input, .stSelectbox div[data-baseweb="select"] { background-color: #262730 !important; color: #FFFFFF !important; }
+    
+    /* Parche de Color para Casillas (incluyendo el selectbox) */
+    input, .stSelectbox div[data-baseweb="select"], .stSelectbox select { 
+        background-color: #262730 !important; 
+        color: #FFFFFF !important; 
+        border-color: #4a4a4a !important;
+    }
+    
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #FFFFFF !important; }
     hr { border-color: #4a4a4a !important; }
     [data-testid="stTable"] { color: white !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS (PARCHE: DB ROBUSTA) ---
-DB_NAME = "bazar_v52_final.db"
+# --- 2. BASE DE DATOS ---
+DB_NAME = "bazar_v53_final.db"
 CATEGORIAS = ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"]
 
 def init_db():
@@ -74,19 +81,20 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (PARCHE 2: YA EXISTE) ---
+# --- 4. REGISTRO (VALORES INICIALES EN 0) ---
 with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
         reg_nom = st.text_input("Nombre")
         reg_cat = st.selectbox("Sección", CATEGORIAS)
-        reg_stk = st.number_input("Stock Inicial", min_value=0, value=10)
-        reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0)
-        reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5)
+        reg_stk = st.number_input("Stock Inicial", min_value=0, value=0)
+        reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=0.0)
+        reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=0.0)
         if st.form_submit_button("💾 GUARDAR", use_container_width=True):
             if reg_nom:
                 nombre_up = reg_nom.strip().upper()
                 conn = sqlite3.connect(DB_NAME)
+                # PARCHE 2: VERIFICAR SI EXISTE
                 existe = conn.execute("SELECT 1 FROM inventario WHERE producto = ?", (nombre_up,)).fetchone()
                 if not existe:
                     conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
@@ -136,13 +144,11 @@ with col_izq:
                         if st.button("✏️", key=f"pencil_{row['id']}"):
                             st.session_state[f"editing_{row['id']}"] = True
                     
-                    # PANEL EDITOR (CON CORRECCIÓN DE SYNTAX ERROR)
                     if st.session_state.get(f"editing_{row['id']}", False):
                         with st.expander(f"Editar: {row['producto']}", expanded=True):
                             e1, e2 = st.columns(2)
                             new_cat = e1.selectbox("Mover a sección:", CATEGORIAS, index=CATEGORIAS.index(cat), key=f"newcat_{row['id']}")
                             new_price = e2.number_input("Nuevo Precio Venta:", min_value=0.0, value=row['precio_venta'], key=f"newprice_{row['id']}")
-                            
                             b1, b2 = st.columns(2)
                             if b1.button("✅ Aplicar", key=f"ok_{row['id']}", use_container_width=True):
                                 conn = sqlite3.connect(DB_NAME)
@@ -173,6 +179,6 @@ with col_der:
     st.write("---")
     st.subheader("📜 Actividad")
     if not df_act.empty:
-        # PARCHE 1: ACTIVIDAD LIMPIA SIN ÍNDICE
+        # PARCHE 1: SIN ÍNDICE
         st.dataframe(df_act, use_container_width=True, hide_index=True)
     else: st.write("Sin actividad.")
