@@ -6,37 +6,50 @@ from datetime import datetime, timedelta
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
-# --- 2. ESTILO EQUILIBRADO (DISEÑO ORIGINAL + TEXTO CLARO) ---
+# --- 2. ESTILO DE ALTA VISIBILIDAD ---
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
     [data-testid="stHeader"] {display:none !important;}
     
-    /* Regresamos al estilo nativo pero asegurando que el texto sea negro */
-    input, .stSelectbox div[data-baseweb="select"] {
+    /* 1. TEXTO DENTRO DE LAS CASILLAS: Negro intenso y más grueso */
+    input {
         color: #000000 !important;
+        font-weight: 600 !important;
+        font-size: 16px !important;
     }
 
-    /* Mantenemos el borde resaltado solo cuando se hace foco para ayudar a la vista */
-    input:focus {
-        border-color: #ff4b4b !important;
-        box-shadow: 0 0 5px rgba(255, 75, 75, 0.5) !important;
+    /* 2. TEXTO DE LA SECCIÓN (SELECTBOX) */
+    .stSelectbox div[data-baseweb="select"] div {
+        color: #000000 !important;
+        font-weight: 600 !important;
+        font-size: 16px !important;
     }
 
-    /* Asegurar que la flecha de la sección sea visible y negra */
+    /* 3. LA FLECHITA: Ahora es más grande y de color rojo oscuro para que se note */
     svg[title="open"] {
-        fill: #000000 !important;
+        fill: #FF4B4B !important;
+        width: 30px !important;
+        height: 30px !important;
     }
-    
-    /* Texto de las métricas más legible */
-    [data-testid="stMetricValue"] {
+
+    /* 4. MEJORAR CONTRASTE DE ETIQUETAS (Los nombres arriba de las casillas) */
+    label p {
         color: #000000 !important;
+        font-weight: bold !important;
+        font-size: 15px !important;
+    }
+
+    /* Borde resaltado al hacer click */
+    input:focus {
+        border-color: #FF4B4B !important;
+        box-shadow: 0 0 5px rgba(255, 75, 75, 0.8) !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 3. BASE DE DATOS ---
-DB_NAME = "bazar_v21_final.db"
+DB_NAME = "bazar_v22_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -92,7 +105,7 @@ with c2:
 
 st.divider()
 
-# --- 5. REGISTRO (Diseño Original Restaurado) ---
+# --- 5. REGISTRO (Sidebar de alta visibilidad) ---
 with st.sidebar:
     st.header("📦 Registro")
     
@@ -102,7 +115,7 @@ with st.sidebar:
     reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0, step=0.1)
     reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5, step=0.1)
     
-    if st.button("💾 GUARDAR", use_container_width=True):
+    if st.button("💾 GUARDAR PRODUCTO", use_container_width=True, type="secondary"):
         if reg_nom and reg_vta > 0:
             nombre_final = reg_nom.strip().upper()
             try:
