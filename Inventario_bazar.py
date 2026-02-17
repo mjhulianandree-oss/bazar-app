@@ -3,24 +3,10 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Bazar Pro", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Bazar Pro - Secciones", layout="wide")
 
-# --- 2. BLINDAJE REFORZADO (Oculta absolutamente todo el marco de Streamlit) ---
-st.markdown("""
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stAppDeployButton {display:none !important;}
-    button[title="View source"] {display:none !important;}
-    #stDecoration {display:none !important;}
-    [data-testid="stHeader"] {display:none !important;}
-    .block-container {padding-top: 1rem !important;}
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- 3. BASE DE DATOS ---
+# --- BASE DE DATOS (v4 con Categorías) ---
 def init_db():
     conn = sqlite3.connect("bazar_secciones.db")
     cursor = conn.cursor()
@@ -57,7 +43,7 @@ def borrar_producto(id_prod):
 
 init_db()
 
-# --- 4. FUNCIONES DE REGISTRO ---
+# --- FUNCIONES DE AYUDA ---
 def registrar_venta(id_prod, nombre_prod, p_venta, p_costo):
     conn = sqlite3.connect("bazar_secciones.db")
     cursor = conn.cursor()
@@ -74,15 +60,18 @@ def registrar_venta(id_prod, nombre_prod, p_venta, p_costo):
     conn.commit()
     conn.close()
 
-# --- 5. INTERFAZ LATERAL (SIDEBAR) ---
+# --- INTERFAZ SIDEBAR ---
 with st.sidebar:
     st.header("📦 Nuevo Producto")
     nuevo_nombre = st.text_input("Nombre del Producto")
-    categoria = st.selectbox("Sección", 
-                            ["🍭 Dulces y Snacks", "🥤 Bebidas", "🥛 Lácteos", "📝 Útiles/Académico", "🏠 Otros"])
+    
+    # NUEVO: Selección de Categoría
+    categoria = st.selectbox("Sección/Categoría", 
+                            ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
+    
     n_stock = st.number_input("Stock Inicial", min_value=1, value=50)
-    n_costo = st.number_input("Costo Unitario (Bs)", min_value=0.1, value=1.0)
-    n_venta = st.number_input("Venta Unitario (Bs)", min_value=0.1, value=1.5)
+    n_costo = st.number_input("Precio Costo (Bs)", min_value=0.1, value=1.0)
+    n_venta = st.number_input("Precio Venta (Bs)", min_value=0.1, value=1.5)
     
     if st.button("Guardar en Inventario"):
         if nuevo_nombre:
@@ -94,25 +83,27 @@ with st.sidebar:
             """, (nuevo_nombre, categoria, n_stock, n_costo, n_venta))
             conn.commit()
             conn.close()
-            st.success("Guardado")
+            st.success(f"¡{nuevo_nombre} añadido!")
             st.rerun()
 
-# --- 6. CARGA DE DATOS ---
+# --- OBTENCIÓN DE DATOS ---
 conn = sqlite3.connect("bazar_secciones.db")
 df_inv = pd.read_sql_query("SELECT * FROM inventario", conn)
 df_vts = pd.read_sql_query("SELECT nombre_producto, cantidad, fecha, ganancia_vta, total_vta FROM ventas", conn)
 conn.close()
 
-# --- 7. CUERPO PRINCIPAL ---
-st.title("🛒 Control del Bazar")
+# --- CUERPO PRINCIPAL ---
+st.title("🛒 Control del Bazar por Secciones")
 
-col1, col2 = st.columns([2, 1.3])
+col1, col2 = st.columns([2, 1.2])
 
 with col1:
-    st.subheader("📦 Stock por Sección")
+    st.subheader("📦 Inventario por Categoría")
+    
     if df_inv.empty:
-        st.info("Vacío")
+        st.info("Agrega productos en la barra lateral.")
     else:
+        # CREAR PESTAÑAS SEGÚN LAS CATEGORÍAS QUE EXISTEN
         categorias_reales = df_inv['categoria'].unique().tolist()
         tabs = st.tabs(categorias_reales)
         
@@ -121,6 +112,7 @@ with col1:
                 df_cat = df_inv[df_inv['categoria'] == cat]
                 for index, row in df_cat.iterrows():
                     stock_actual = row['stock_inicial'] - row['ventas_acumuladas']
+                    
                     c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
                     
                     if stock_actual <= 0:
@@ -132,17 +124,19 @@ with col1:
                     else:
                         c1.write(f"**{row['producto']}**")
                         c2.write(f"Disp: {int(stock_actual)}")
-                        if c3.button(f"Venta: {row['precio_venta']} Bs", key=f"vta_{row['id']}"):
+                        if c3.button(f"Vender {row['precio_venta']} Bs", key=f"vta_{row['id']}"):
                             registrar_venta(row['id'], row['producto'], row['precio_venta'], row['precio_costo'])
                             st.rerun()
 
 with col2:
-    st.subheader("💰 Ganancias")
+    st.subheader("💰 Resumen Financiero")
     ganancia_total = df_vts['ganancia_vta'].sum()
-    st.metric("Total Ganado", f"{ganancia_total:.2f} Bs")
+    st.metric("Ganancia Total", f"{ganancia_total:.2f} Bs")
     
-    with st.expander("📝 Historial", expanded=True):
+    with st.expander("📝 Historial Detallado", expanded=True):
         if not df_vts.empty:
             df_mostrar = df_vts[['fecha', 'nombre_producto', 'total_vta', 'ganancia_vta']].copy()
             df_mostrar.index = range(1, len(df_mostrar) + 1)
-            st.table(df_mostrar.rename(columns={'nombre_producto': 'Producto', 'total_vta': 'Venta', 'ganancia_vta': 'Ganancia'}))
+            st.table(df_mostrar.rename(
+                columns={'nombre_producto': 'Producto', 'total_vta': 'Venta', 'ganancia_vta': 'Ganancia'}
+            ))
