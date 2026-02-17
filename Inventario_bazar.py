@@ -20,7 +20,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v49_final.db"
+DB_NAME = "bazar_v50_final.db"
 CATEGORIAS = ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"]
 
 def init_db():
@@ -97,7 +97,7 @@ with st.sidebar:
                     conn.close(); st.warning(f"'{nombre_up}' ya existe.")
 
 # --- 5. MOSTRADOR ---
-col_izq, col_der = st.columns([2.3, 1.1])
+col_izq, col_der = st.columns([2.4, 1])
 
 with col_izq:
     st.subheader("🛒 Panel de Ventas")
@@ -110,20 +110,11 @@ with col_izq:
                     disp = row['stock_inicial'] - row['ventas_acumuladas']
                     vta_indiv = row['ventas_acumuladas']
                     
-                    # Estructura: Producto/Editar | Stock | Cantidad | Botón+ | Botón Venta
-                    c_a, c_b, c_input, c_btn_add, c_vta = st.columns([2.6, 0.8, 0.7, 0.6, 1.3])
+                    # Columnas: Producto | Tienda | Cant | Botón+ | Botón Venta | Editar
+                    c_a, c_b, c_input, c_btn_add, c_vta, c_edit = st.columns([2.2, 1, 0.7, 0.6, 1.4, 0.5])
                     
-                    # NOMBRE + EDITOR DE CATEGORÍA
-                    with c_a:
-                        st.write(f"**{row['producto']}** (V: {int(vta_indiv)})")
-                        new_cat = st.selectbox("Mover a:", CATEGORIAS, index=CATEGORIAS.index(cat), key=f"edit_{row['id']}", label_visibility="collapsed")
-                        if new_cat != cat:
-                            conn = sqlite3.connect(DB_NAME)
-                            conn.execute("UPDATE inventario SET categoria = ? WHERE id = ?", (new_cat, row['id']))
-                            conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, f"MOVIDO: {row['producto']} a {new_cat}"))
-                            conn.commit(); conn.close(); st.rerun()
-                    
-                    c_b.write(f"Stk: {int(disp)}")
+                    c_a.write(f"**{row['producto']}** \n*(V: {int(vta_indiv)})*")
+                    c_b.write(f"Tienda: {int(disp)}")
                     
                     # Sumador masivo
                     add_val = c_input.number_input("Cant", min_value=1, value=1, key=f"num_{row['id']}", label_visibility="collapsed")
@@ -143,7 +134,23 @@ with col_izq:
                             conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, f"VENTA: {row['producto']}"))
                             conn.commit(); conn.close(); st.rerun()
                     else: c_vta.error("Agotado")
-                
+                    
+                    # LÁPIZ EDITOR
+                    with c_edit:
+                        if st.button("✏️", key=f"pencil_{row['id']}"):
+                            st.session_state[f"editing_{row['id']}"] = True
+                        
+                        if st.session_state.get(f"editing_{row['id']}", False):
+                            new_cat = st.selectbox("Sección", CATEGORIAS, index=CATEGORIAS.index(cat), key=f"newcat_{row['id']}")
+                            if st.button("OK", key=f"ok_{row['id']}"):
+                                if new_cat != cat:
+                                    conn = sqlite3.connect(DB_NAME)
+                                    conn.execute("UPDATE inventario SET categoria = ? WHERE id = ?", (new_cat, row['id']))
+                                    conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, f"MOVIDO: {row['producto']} a {new_cat}"))
+                                    conn.commit(); conn.close()
+                                st.session_state[f"editing_{row['id']}"] = False
+                                st.rerun()
+
                 # --- RESUMEN DE SECCIÓN ---
                 st.markdown("---")
                 df_vts_cat = df_vts[df_vts['categoria'] == cat]
