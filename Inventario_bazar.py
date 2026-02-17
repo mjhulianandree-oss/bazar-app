@@ -6,23 +6,42 @@ from datetime import datetime, timedelta
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
-# Estilo para mejorar la visibilidad del foco y selección
+# --- 2. BLINDAJE VISUAL Y FIX DE CASILLAS BLANCAS ---
 st.markdown("""
     <style>
+    /* Ocultar menús innecesarios */
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
     [data-testid="stHeader"] {display:none !important;}
     
-    /* Resaltado del campo seleccionado para que tus papás vean dónde están */
+    /* FIX: Forzar que las casillas de escritura sean siempre legibles */
+    input {
+        color: #000000 !important; /* Texto siempre negro */
+        background-color: #F0F2F6 !important; /* Fondo gris claro constante */
+        border: 2px solid #d1d1d1 !important;
+        border-radius: 5px !important;
+    }
+
+    /* Cuando el usuario hace click o escribe (Foco) */
     input:focus {
         border-color: #ff4b4b !important;
-        box-shadow: 0 0 8px #ff4b4b !important;
-        background-color: #fffdfd !important;
+        background-color: #ffffff !important; /* Fondo blanco puro al escribir */
+        box-shadow: 0 0 10px rgba(255, 75, 75, 0.5) !important;
+        color: #000000 !important;
+    }
+
+    /* Quitar el color amarillo/blanco feo del autocompletado de Google */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover, 
+    input:-webkit-autofill:focus {
+        -webkit-text-fill-color: #000000 !important;
+        -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+        transition: background-color 5000s ease-in-out 0s;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS (V17) ---
-DB_NAME = "bazar_v17_final.db"
+# --- 3. BASE DE DATOS (V18) ---
+DB_NAME = "bazar_v18_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -56,12 +75,12 @@ def get_data():
     vts = pd.read_sql_query("SELECT * FROM ventas ORDER BY id ASC", conn)
     res_est = conn.execute("SELECT abierto FROM estado_tienda WHERE id = 1").fetchone()
     conn.close()
-    return inv, vts, res_est[0] if res_est else 0
+    return inv, vts, (res_est[0] if res_est else 0)
 
 df_inv, df_vts, estado_abierto = get_data()
 abierto = True if estado_abierto == 1 else False
 
-# --- 3. CABECERA ---
+# --- 4. CABECERA ---
 st.title("🏪 Bazar Master Pro")
 c1, c2 = st.columns([1, 2])
 with c1:
@@ -78,17 +97,12 @@ with c2:
 
 st.divider()
 
-# --- 4. REGISTRO RÁPIDO (Optimizado para sobreescribir) ---
+# --- 5. REGISTRO RÁPIDO (Sidebar) ---
 with st.sidebar:
     st.header("📦 Registro de Producto")
-    st.write("💡 *Tip: Usa **TAB** para saltar y sobreescribir.*")
-
-    # Usamos st.empty para poder limpiar el input después de guardar
-    placeholder_nombre = st.empty()
     
-    # El truco: Si el nombre ya existe en session_state, lo usamos; si no, vacío.
-    # Al estar fuera de un form, el comportamiento de selección de texto del navegador es más agresivo (lo cual queremos)
-    reg_nom = placeholder_nombre.text_input("Nombre del Producto", key="input_nom", placeholder="Escribe aquí...")
+    # Campo de nombre con protección de autocompletado
+    reg_nom = st.text_input("Nombre del Producto", key="input_nom", autocomplete="off")
     reg_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
     reg_stk = st.number_input("Stock Inicial", min_value=0, value=10)
     reg_cst = st.number_input("Costo unitario (Bs)", min_value=0.0, value=1.0, step=0.1)
@@ -102,19 +116,14 @@ with st.sidebar:
                 conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
                              (nombre_final, reg_cat, reg_stk, reg_cst, reg_vta))
                 conn.commit(); conn.close()
-                
-                # Guardamos la categoría para abrir la pestaña correcta
                 st.session_state.ultima_cat = reg_cat
-                st.success(f"¡{nombre_final} guardado!")
-                # Forzamos reinicio para limpiar campos y ver el producto nuevo
                 st.rerun()
-                
             except sqlite3.IntegrityError:
-                st.error(f"¡Ojo! '{nombre_final}' ya existe en el inventario.")
+                st.error(f"¡'{nombre_final}' ya existe!")
         else:
-            st.warning("Falta el nombre o el precio.")
+            st.warning("Completa los datos.")
 
-# --- 5. MOSTRADOR ---
+# --- 6. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
 
 with col_izq:
@@ -130,7 +139,6 @@ with col_izq:
                 for _, row in df_cat.iterrows():
                     disp = row['stock_inicial'] - row['ventas_acumuladas']
                     c_a, c_b, c_c, c_d = st.columns([3, 1.5, 2, 0.8])
-                    
                     c_a.write(f"**{row['producto']}**")
                     c_b.write(f"Disp: {int(disp)}")
                     
@@ -159,12 +167,3 @@ with col_der:
         if not df_vts.empty:
             v_reales = df_vts[df_vts['cantidad'] > 0].tail(10)
             st.table(v_reales[['fecha', 'nombre_producto', 'total_vta']].rename(columns={'total_vta': 'Bs'}))
-
-# --- 6. RESUMEN SECCIONES ---
-st.divider()
-if not df_vts.empty:
-    res = df_vts[df_vts['cantidad'] > 0].groupby('categoria').agg({'total_vta': 'sum'}).reset_index()
-    cols = st.columns(len(res) if len(res) > 0 else 1)
-    for i, r in res.iterrows():
-        with cols[i]:
-            st.info(f"**{r['categoria']}**\n\nCaja: {r['total_vta']:.2f}")
