@@ -34,6 +34,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, nombre_producto TEXT, categoria TEXT,
         cantidad INTEGER, fecha TEXT, ganancia_vta REAL, total_vta REAL)""")
     
+    # Tabla de logs para mantener el orden real de cierre/apertura/ventas
     cursor.execute("""CREATE TABLE IF NOT EXISTS log_actividad (
         id INTEGER PRIMARY KEY AUTOINCREMENT, hora TEXT, detalle TEXT)""")
     
@@ -48,6 +49,7 @@ def get_data():
     conn = sqlite3.connect(DB_NAME)
     inv = pd.read_sql_query("SELECT * FROM inventario", conn)
     vts = pd.read_sql_query("SELECT * FROM ventas", conn)
+    # Traemos la actividad ordenada por ID (el orden exacto en que pasaron las cosas)
     act = pd.read_sql_query("SELECT hora, detalle FROM log_actividad ORDER BY id DESC LIMIT 20", conn)
     res_est = conn.execute("SELECT abierto FROM estado_tienda WHERE id = 1").fetchone()
     conn.close()
@@ -117,12 +119,18 @@ with col_izq:
                             conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, ?, 1, ?, ?, ?)", 
                                          (row['producto'], row['categoria'], ahora, row['precio_venta']-row['precio_costo'], row['precio_venta']))
                             conn.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (row['id'],))
+                            # REGISTRAMOS LA VENTA EN EL LOG DE ACTIVIDAD
                             conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora, f"VENTA: {row['producto']}"))
                             conn.commit(); conn.close(); st.rerun()
                     else: st.error("Agotado")
                 
-                # SE ELIMINÓ EL CONTADOR DE ESTA SECCIÓN (GANANCIA/CAJA POR PESTAÑA)
+                # Resumen de sección
                 st.markdown("---")
+                df_vts_cat = df_vts[df_vts['categoria'] == cat]
+                if not df_vts_cat.empty:
+                    m1, m2 = st.columns(2)
+                    m1.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
+                    m2.metric("Caja", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
 
 with col_der:
     st.subheader("💰 Total Hoy")
@@ -132,6 +140,7 @@ with col_der:
     st.subheader("📜 Actividad")
     
     if not df_act.empty:
+        # Mostramos la tabla sin índice para que se vea limpia
         st.table(df_act)
     else:
         st.write("Sin actividad.")
