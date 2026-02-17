@@ -1,101 +1,62 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
-from datetime import datetime
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Bazar Familiar - Control de Ventas", layout="wide")
+# Configuración de la página
+st.set_page_config(page_title="Bazar Familiar Llallagua", layout="wide")
 
-# --- BASE DE DATOS (Misma lógica que usaste en la obra) ---
-def init_db():
-    conn = sqlite3.connect("bazar_datos.db")
-    cursor = conn.cursor()
-    # Tabla de Inventario
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS inventario (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            producto TEXT,
-            stock_inicial INTEGER,
-            precio_costo REAL,
-            precio_venta REAL
-        )
-    """)
-    # Tabla de Ventas
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS ventas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            producto_id INTEGER,
-            cantidad INTEGER,
-            fecha TEXT,
-            ganancia_vta REAL
-        )
-    """)
-    conn.commit()
-    conn.close()
+# Inicializar los datos en la sesión (Simulando una base de datos)
+if 'inventario' not in st.session_state:
+    data = {
+        'Producto': ['Arroz', 'Azúcar', 'Aceite', 'Fideo'],
+        'Precio (Bs)': [5.50, 6.00, 12.00, 4.50],
+        'Stock': [50, 40, 20, 30]
+    }
+    st.session_state.inventario = pd.DataFrame(data)
 
-init_db()
+if 'ventas' not in st.session_state:
+    st.session_state.ventas = pd.DataFrame(columns=['Producto', 'Cantidad', 'Total (Bs)'])
 
-# --- FUNCIONES DE AYUDA ---
-def registrar_venta(id_prod, p_venta, p_costo):
-    conn = sqlite3.connect("bazar_datos.db")
-    cursor = conn.cursor()
-    ganancia = p_venta - p_costo
-    cursor.execute("INSERT INTO ventas (producto_id, cantidad, fecha, ganancia_vta) VALUES (?, ?, ?, ?)",
-                   (id_prod, 1, datetime.now().strftime("%Y-%m-%d %H:%M"), ganancia))
-    conn.commit()
-    conn.close()
+st.title("🏪 Sistema de Inventario - Bazar")
 
-# --- INTERFAZ ---
-st.title("🛒 Control del Bazar")
-
-# Sidebar para agregar productos nuevos
-with st.sidebar:
-    st.header("Agregar Nuevo Producto")
-    nuevo_nombre = st.text_input("Nombre del Producto (Ej: Paquete Grosso)")
-    n_stock = st.number_input("Stock Inicial", min_value=1, value=50)
-    n_costo = st.number_input("Precio Costo (Bs)", min_value=0.1, value=1.0)
-    n_venta = st.number_input("Precio Venta (Bs)", min_value=0.1, value=1.5)
-    
-    if st.button("Guardar Producto"):
-        conn = sqlite3.connect("bazar_datos.db")
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO inventario (producto, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?)",
-                       (nuevo_nombre, n_stock, n_costo, n_venta))
-        conn.commit()
-        conn.close()
-        st.success("¡Producto añadido!")
-
-# --- CUERPO PRINCIPAL ---
-conn = sqlite3.connect("bazar_datos.db")
-df_inv = pd.read_sql_query("SELECT * FROM inventario", conn)
-df_vts = pd.read_sql_query("SELECT * FROM ventas", conn)
-conn.close()
-
-col1, col2 = st.columns([2, 1])
+# --- SECCIÓN 1: REGISTRAR VENTA ---
+st.header("🛒 Registrar Venta")
+col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📦 Inventario y Ventas Rápidas")
-    for index, row in df_inv.iterrows():
-        # Calcular ventas hechas para este producto
-        v_hechas = df_vts[df_vts['producto_id'] == row['id']]['cantidad'].sum()
-        stock_actual = row['stock_inicial'] - v_hechas
-        
-        # Mostrar producto y botón de venta
-        c1, c2, c3 = st.columns([3, 2, 2])
-        c1.write(f"**{row['producto']}** (Stock: {stock_actual})")
-        c2.write(f"{row['precio_venta']} Bs")
-        if c3.button(f"Vender 1", key=row['id']):
-            if stock_actual > 0:
-                registrar_venta(row['id'], row['precio_venta'], row['precio_costo'])
-                st.rerun()
-            else:
-                st.error("Sin stock")
-
+    # Ahora elegimos por Nombre de Producto
+    producto_seleccionado = st.selectbox(
+        "Seleccione el Producto", 
+        st.session_state.inventario['Producto'].tolist()
+    )
+    
 with col2:
-    st.subheader("💰 Resumen Financiero")
-    ganancia_total = df_vts['ganancia_vta'].sum()
-    st.metric("Ganancia Total acumulada", f"{ganancia_total:.2f} Bs")
-    st.write(f"Total ventas realizadas: {len(df_vts)}")
+    cantidad = st.number_input("Cantidad", min_value=1, step=1)
 
-    if st.checkbox("Ver historial de ventas"):
-        st.dataframe(df_vts)
+if st.button("Registrar Venta"):
+    # Obtener info del producto seleccionado
+    idx = st.session_state.inventario[st.session_state.inventario['Producto'] == producto_seleccionado].index[0]
+    precio = st.session_state.inventario.at[idx, 'Precio (Bs)']
+    stock_actual = st.session_state.inventario.at[idx, 'Stock']
+
+    if stock_actual >= cantidad:
+        total = precio * cantidad
+        # Restar del inventario
+        st.session_state.inventario.at[idx, 'Stock'] = stock_actual - cantidad
+        # Guardar venta
+        nueva_venta = pd.DataFrame({'Producto': [producto_seleccionado], 'Cantidad': [cantidad], 'Total (Bs)': [total]})
+        st.session_state.ventas = pd.concat([st.session_state.ventas, nueva_venta], ignore_index=True)
+        st.success(f"✅ Venta registrada: {producto_seleccionado} x{cantidad} - Total: {total} Bs")
+    else:
+        st.error("❌ Stock insuficiente")
+
+# --- SECCIÓN 2: MOSTRAR TABLAS ---
+st.divider()
+c1, c2 = st.columns(2)
+
+with c1:
+    st.subheader("📦 Inventario Actual")
+    st.table(st.session_state.inventario)
+
+with c2:
+    st.subheader("📈 Ventas del Día")
+    st.table(st.session_state.ventas)
