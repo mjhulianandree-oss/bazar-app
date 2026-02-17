@@ -15,13 +15,12 @@ st.markdown("""
     input, .stSelectbox div[data-baseweb="select"] { background-color: #262730 !important; color: #FFFFFF !important; }
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #FFFFFF !important; }
     hr { border-color: #4a4a4a !important; }
-    /* Estilo para tabla limpia */
     [data-testid="stTable"] { color: white !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v46_final.db"
+DB_NAME = "bazar_v47_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -46,7 +45,6 @@ def get_data():
     conn = sqlite3.connect(DB_NAME)
     inv = pd.read_sql_query("SELECT * FROM inventario", conn)
     vts = pd.read_sql_query("SELECT * FROM ventas", conn)
-    # Tabla de actividad con alias descriptivos
     act = pd.read_sql_query("SELECT hora as 'Fecha y Hora', detalle as 'Actividad' FROM log_actividad ORDER BY id DESC LIMIT 20", conn)
     res_est = conn.execute("SELECT abierto FROM estado_tienda WHERE id = 1").fetchone()
     conn.close()
@@ -54,7 +52,6 @@ def get_data():
 
 df_inv, df_vts, df_act, estado_abierto = get_data()
 abierto = True if estado_abierto == 1 else False
-# Formato de Fecha y Hora actualizado (Bolivia/Llallagua GMT-4 aprox)
 ahora_full = (datetime.now() - timedelta(hours=4)).strftime("%d/%m %H:%M")
 
 # --- 3. CABECERA ---
@@ -89,7 +86,6 @@ with st.sidebar:
             if reg_nom:
                 nombre_up = reg_nom.strip().upper()
                 conn = sqlite3.connect(DB_NAME)
-                # Verificación previa manual
                 existe = conn.execute("SELECT 1 FROM inventario WHERE producto = ?", (nombre_up,)).fetchone()
                 if not existe:
                     conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
@@ -118,7 +114,7 @@ with col_izq:
                     c_a.write(f"**{row['producto']}**")
                     c_b.write(f"Stk: {int(disp)}")
                     
-                    # Sumador masivo
+                    # Sumador masivo de stock
                     add_val = c_input.number_input("Cant", min_value=1, value=1, key=f"num_{row['id']}", label_visibility="collapsed")
                     
                     if c_btn_add.button("➕", key=f"add_{row['id']}"):
@@ -137,17 +133,25 @@ with col_izq:
                             conn.commit(); conn.close(); st.rerun()
                     else: c_vta.error("Agotado")
                 
+                # --- RESUMEN DE SECCIÓN ACTUALIZADO ---
                 st.markdown("---")
                 df_vts_cat = df_vts[df_vts['categoria'] == cat]
                 if not df_vts_cat.empty:
-                    m1, m2 = st.columns(2)
-                    m1.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
-                    m2.metric("Caja", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Vendido", f"{int(df_vts_cat['cantidad'].sum())} u.")
+                    m2.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
+                    m3.metric("Caja", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
 
 with col_der:
-    st.subheader("💰 Total Hoy")
+    st.subheader("💰 Balance Hoy")
     total_caja = df_vts['total_vta'].sum() if not df_vts.empty else 0.0
-    st.metric("Caja General", f"{total_caja:.2f} Bs")
+    total_ganancia = df_vts['ganancia_vta'].sum() if not df_vts.empty else 0.0
+    
+    # NUEVA MÉTRICA DE GANANCIA AL LADO DE CAJA GENERAL
+    mc1, mc2 = st.columns(2)
+    mc1.metric("Caja General", f"{total_caja:.2f} Bs")
+    mc2.metric("Ganancia Total", f"{total_ganancia:.2f} Bs")
+    
     st.write("---")
     st.subheader("📜 Actividad")
     if not df_act.empty:
