@@ -72,7 +72,7 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (Sidebar) ---
+# --- 4. REGISTRO (Sidebar con Actualización Instantánea) ---
 with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
@@ -88,7 +88,8 @@ with st.sidebar:
                     conn = sqlite3.connect(DB_NAME)
                     conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
                                  (nombre_up, reg_cat, reg_stk, reg_cst, reg_vta))
-                    conn.commit(); conn.close(); st.rerun()
+                    conn.commit(); conn.close()
+                    st.rerun() # <--- ESTO ACTUALIZA LA LISTA AL INSTANTE
                 except: st.error("Ese producto ya existe.")
 
 # --- 5. MOSTRADOR ---
@@ -124,8 +125,6 @@ with col_izq:
                     m1.metric("Vendido", f"{int(df_vts_cat['cantidad'].sum())} u.")
                     m2.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
                     m3.metric("Caja", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
-                else:
-                    st.info(f"Sin ventas en {cat}")
 
 with col_der:
     st.subheader("💰 Total Hoy")
