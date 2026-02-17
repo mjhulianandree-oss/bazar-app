@@ -5,10 +5,9 @@ import shutil
 import os
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURACIÓN ---
+# --- 1. CONFIGURACIÓN VISUAL ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
-# Estilo visual de alta visibilidad (Texto blanco en casillas)
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
@@ -28,50 +27,43 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BASE DE DATOS (NUEVA VERSIÓN PARA EVITAR ERRORES) ---
-# Cambiamos el nombre a v27 para forzar una base de datos limpia y sin errores
-DB_NAME = "bazar_v27_estable.db"
+# --- 2. GESTIÓN DE BASE DE DATOS ---
+DB_NAME = "bazar_v28_final.db"
 BACKUP_DIR = "respaldos_bazar"
 
 if not os.path.exists(BACKUP_DIR):
     os.makedirs(BACKUP_DIR)
 
-def crear_respaldo():
-    if os.path.exists(DB_NAME):
-        fecha_hoy = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        backup_path = os.path.join(BACKUP_DIR, f"respaldo_{fecha_hoy}.db")
-        shutil.copy2(DB_NAME, backup_path)
-        return backup_path
-    return None
-
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    # Tabla Inventario
+    # Crear tablas si no existen
     cursor.execute("""CREATE TABLE IF NOT EXISTS inventario (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        producto TEXT UNIQUE, 
-        categoria TEXT, 
-        stock_inicial INTEGER, 
-        precio_costo REAL, 
-        precio_venta REAL, 
-        ventas_acumuladas INTEGER DEFAULT 0)""")
-    # Tabla Ventas - Aquí estaba el error de las fotos
+        id INTEGER PRIMARY KEY AUTOINCREMENT, producto TEXT UNIQUE, categoria TEXT, 
+        stock_inicial INTEGER, precio_costo REAL, precio_venta REAL, ventas_acumuladas INTEGER DEFAULT 0)""")
+    
     cursor.execute("""CREATE TABLE IF NOT EXISTS ventas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        nombre_producto TEXT, 
-        categoria TEXT,
-        cantidad INTEGER, 
-        fecha TEXT, 
-        ganancia_vta REAL, 
-        total_vta REAL)""")
-    # Tabla Estado
+        id INTEGER PRIMARY KEY AUTOINCREMENT, nombre_producto TEXT, categoria TEXT,
+        cantidad INTEGER, fecha TEXT, ganancia_vta REAL, total_vta REAL)""")
+    
+    # --- MECANISMO DE AUTORREPARACIÓN ---
+    # Si la tabla ventas existe pero no tiene la columna 'categoria', la agregamos
+    try:
+        cursor.execute("SELECT categoria FROM ventas LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE ventas ADD COLUMN categoria TEXT DEFAULT 'General'")
+    
     cursor.execute("CREATE TABLE IF NOT EXISTS estado_tienda (id INTEGER PRIMARY KEY, abierto INTEGER)")
     cursor.execute("INSERT OR IGNORE INTO estado_tienda (id, abierto) VALUES (1, 0)")
     conn.commit()
     conn.close()
 
 init_db()
+
+def crear_respaldo():
+    if os.path.exists(DB_NAME):
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        shutil.copy2(DB_NAME, os.path.join(BACKUP_DIR, f"respaldo_{fecha_hoy}.db"))
 
 def get_data():
     conn = sqlite3.connect(DB_NAME)
@@ -81,15 +73,7 @@ def get_data():
     conn.close()
     return inv, vts, (res_est[0] if res_est else 0)
 
-# Carga de datos
-try:
-    df_inv, df_vts, estado_abierto = get_data()
-except:
-    # Si algo falla, reiniciamos la conexión una vez
-    st.warning("Actualizando base de datos...")
-    init_db()
-    df_inv, df_vts, estado_abierto = get_data()
-
+df_inv, df_vts, estado_abierto = get_data()
 abierto = True if estado_abierto == 1 else False
 
 # --- 3. CABECERA ---
@@ -105,16 +89,14 @@ with c1:
             st.rerun()
     else:
         if st.button("🔓 ABRIR TIENDA", use_container_width=True):
-            conn = sqlite3.connect(DB_NAME)
-            conn.execute("UPDATE estado_tienda SET abierto = 1 WHERE id = 1")
-            conn.commit(); conn.close()
-            st.rerun()
+            conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE estado_tienda SET abierto = 1 WHERE id = 1")
+            conn.commit(); conn.close(); st.rerun()
 with c2:
     st.subheader("🟢 Activo" if abierto else "⚠️ Cerrado")
 
 st.divider()
 
-# --- 4. REGISTRO (Sidebar) ---
+# --- 4. REGISTRO ---
 with st.sidebar:
     st.header("📦 Registro")
     reg_nom = st.text_input("Nombre", key="input_nom", autocomplete="off")
@@ -125,29 +107,20 @@ with st.sidebar:
     
     if st.button("💾 GUARDAR PRODUCTO", use_container_width=True):
         if reg_nom and reg_vta > 0:
-            nombre_final = reg_nom.strip().upper()
             try:
                 conn = sqlite3.connect(DB_NAME)
                 conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
-                             (nombre_final, reg_cat, reg_stk, reg_cst, reg_vta))
-                conn.commit(); conn.close()
-                st.session_state.ultima_cat = reg_cat
-                st.success(f"¡{nombre_final} guardado!")
-                st.rerun()
+                             (reg_nom.strip().upper(), reg_cat, reg_stk, reg_cst, reg_vta))
+                conn.commit(); conn.close(); st.rerun()
             except sqlite3.IntegrityError:
-                st.error(f"¡{nombre_final} ya existe!")
-        else:
-            st.warning("Completa los datos.")
+                st.error("¡Ya existe!")
 
 # --- 5. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
-
 with col_izq:
-    st.subheader("📦 Mostrador")
     if not df_inv.empty:
         cats = sorted(df_inv['categoria'].unique().tolist())
         tabs = st.tabs(cats)
-        
         for i, cat in enumerate(cats):
             with tabs[i]:
                 df_cat = df_inv[df_inv['categoria'] == cat]
@@ -156,36 +129,23 @@ with col_izq:
                     c_a, c_b, c_c, c_d = st.columns([3, 1.5, 2, 0.8])
                     c_a.write(f"**{row['producto']}**")
                     c_b.write(f"Disp: {int(disp)}")
-                    
                     if disp > 0:
                         if c_c.button(f"Venta {row['precio_venta']} Bs", key=f"v_{row['id']}", disabled=not abierto):
                             conn = sqlite3.connect(DB_NAME)
-                            # Ajuste de hora (Bolivia -4h)
-                            fecha_actual = (datetime.now() - timedelta(hours=4)).strftime("%H:%M")
+                            f_actual = (datetime.now() - timedelta(hours=4)).strftime("%H:%M")
+                            # Insertamos incluyendo la categoría para evitar el error de las fotos
                             conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, ?, 1, ?, ?, ?)", 
-                                         (row['producto'], row['categoria'], 1, fecha_actual, row['precio_venta']-row['precio_costo'], row['precio_venta']))
+                                         (row['producto'], row['categoria'], 1, f_actual, row['precio_venta']-row['precio_costo'], row['precio_venta']))
                             conn.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (row['id'],))
-                            conn.commit(); conn.close()
-                            st.rerun()
-                    else:
-                        c_c.error("Agotado")
-                    
+                            conn.commit(); conn.close(); st.rerun()
+                    else: c_c.error("Agotado")
                     with c_d.popover("➕"):
                         if st.button("Surtir +10", key=f"s_{row['id']}"):
-                            conn = sqlite3.connect(DB_NAME)
-                            conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + 10 WHERE id = ?", (row['id']))
-                            conn.commit(); conn.close(); st.rerun()
+                            conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + 10 WHERE id = ?", (row['id'])); conn.commit(); conn.close(); st.rerun()
 
 with col_der:
     st.subheader("💰 Resumen")
     st.metric("Caja Total", f"{df_vts['total_vta'].sum() if not df_vts.empty else 0:.2f} Bs")
-    
     with st.expander("📝 Actividad Reciente", expanded=True):
         if not df_vts.empty:
-            # Mostramos las últimas 10 ventas filtrando por categoría válida
-            v_reales = df_vts.tail(10)
-            st.table(v_reales[['fecha', 'nombre_producto', 'total_vta']].rename(columns={'total_vta':'Bs'}))
-    
-    if st.button("📁 Crear Respaldo Ahora"):
-        p = crear_respaldo()
-        st.success("Copia guardada en carpeta 'respaldos_bazar'")
+            st.table(df_vts.tail(8)[['fecha', 'nombre_producto', 'total_vta']].rename(columns={'total_vta':'Bs'}))
