@@ -6,55 +6,55 @@ from datetime import datetime, timedelta
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
-# --- 2. ESTILO DE ALTO CONTRASTE (TEXTO BLANCO) ---
+# --- 2. UNIFICACIÓN TOTAL DE COLORES ---
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stAppDeployButton {visibility: hidden;}
     [data-testid="stHeader"] {display:none !important;}
     
-    /* 1. TEXTO DENTRO DE LAS CASILLAS: Blanco puro y grueso */
-    input {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important; /* Para navegadores basados en Chrome */
+    /* UNIFICAR TODAS LAS CASILLAS: Fondo, Borde y Texto */
+    input, 
+    .stSelectbox div[data-baseweb="select"],
+    .stSelectbox div[data-baseweb="select"] > div {
+        background-color: #262730 !important; /* Gris oscuro idéntico */
+        color: #FFFFFF !important;            /* Texto blanco puro */
+        -webkit-text-fill-color: #FFFFFF !important;
+        border: 1px solid #4a4a4a !important;
+        border-radius: 5px !important;
         font-weight: 700 !important;
-        font-size: 18px !important;
+        font-size: 16px !important;
     }
 
-    /* 2. TEXTO DE LA SECCIÓN (SELECTBOX) EN BLANCO */
-    .stSelectbox div[data-baseweb="select"] div {
-        color: #FFFFFF !important;
-        font-weight: 700 !important;
+    /* Quitar el color gris que pone Streamlit por defecto en el selectbox */
+    .stSelectbox div[role="button"] {
+        background-color: transparent !important;
     }
 
-    /* 3. LA FLECHITA: Roja y brillante */
+    /* LA FLECHITA: Roja y bien visible */
     svg[title="open"] {
         fill: #FF4B4B !important;
-        width: 25px !important;
-        height: 25px !important;
+        width: 22px !important;
+        height: 22px !important;
     }
 
-    /* 4. FONDO DE LAS CASILLAS: Un poco más oscuro para que el blanco brille */
-    input, .stSelectbox div[data-baseweb="select"] {
-        background-color: #262730 !important; 
-        border: 2px solid #4a4a4a !important;
-    }
-
-    /* Foco cuando el usuario está escribiendo */
-    input:focus {
+    /* FOCO: Cuando estás dentro de cualquier casilla */
+    input:focus, 
+    .stSelectbox div[data-baseweb="select"]:focus-within {
         border-color: #FF4B4B !important;
-        box-shadow: 0 0 8px rgba(255, 75, 75, 1) !important;
+        box-shadow: 0 0 8px rgba(255, 75, 75, 0.6) !important;
     }
 
-    /* Asegurar que las etiquetas de arriba sigan siendo legibles */
+    /* ETIQUETAS: Nombres arriba de las casillas en negro fuerte */
     label p {
         color: #000000 !important;
         font-weight: bold !important;
+        font-size: 14px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 3. BASE DE DATOS ---
-DB_NAME = "bazar_v23_final.db"
+DB_NAME = "bazar_v24_final.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -110,7 +110,7 @@ with c2:
 
 st.divider()
 
-# --- 5. REGISTRO (Sidebar con Texto Blanco en Inputs) ---
+# --- 5. REGISTRO UNIFICADO ---
 with st.sidebar:
     st.header("📦 Registro")
     
@@ -120,7 +120,7 @@ with st.sidebar:
     reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=1.0, step=0.1)
     reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5, step=0.1)
     
-    if st.button("💾 GUARDAR", use_container_width=True):
+    if st.button("💾 GUARDAR PRODUCTO", use_container_width=True):
         if reg_nom and reg_vta > 0:
             nombre_final = reg_nom.strip().upper()
             try:
@@ -133,7 +133,7 @@ with st.sidebar:
             except sqlite3.IntegrityError:
                 st.error(f"¡{nombre_final} ya existe!")
         else:
-            st.warning("Falta info.")
+            st.warning("Completa los datos.")
 
 # --- 6. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
