@@ -15,7 +15,6 @@ st.markdown("""
     input, .stSelectbox div[data-baseweb="select"] { background-color: #262730 !important; color: #FFFFFF !important; }
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #FFFFFF !important; }
     hr { border-color: #4a4a4a !important; }
-    /* Estilo para tabla limpia sin bordes innecesarios */
     [data-testid="stTable"] { color: white !important; width: 100%; }
     </style>
     """, unsafe_allow_html=True)
@@ -45,7 +44,6 @@ def get_data():
     conn = sqlite3.connect(DB_NAME)
     inv = pd.read_sql_query("SELECT * FROM inventario", conn)
     vts = pd.read_sql_query("SELECT * FROM ventas", conn)
-    # Obtenemos la actividad para mostrarla sin el índice ID
     act = pd.read_sql_query("SELECT hora as 'Hora', detalle as 'Detalle' FROM log_actividad ORDER BY id DESC LIMIT 20", conn)
     res_est = conn.execute("SELECT abierto FROM estado_tienda WHERE id = 1").fetchone()
     conn.close()
@@ -74,7 +72,7 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (Sidebar con limpieza automática) ---
+# --- 4. REGISTRO (Sidebar) ---
 with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
@@ -117,7 +115,17 @@ with col_izq:
                             conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora, f"VENTA: {row['producto']}"))
                             conn.commit(); conn.close(); st.rerun()
                     else: st.error("Agotado")
+                
+                # --- CONTADOR POR SECCIÓN ---
                 st.markdown("---")
+                df_vts_cat = df_vts[df_vts['categoria'] == cat]
+                if not df_vts_cat.empty:
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Vendido", f"{int(df_vts_cat['cantidad'].sum())} u.")
+                    m2.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
+                    m3.metric("Caja", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
+                else:
+                    st.info(f"Sin ventas en {cat}")
 
 with col_der:
     st.subheader("💰 Total Hoy")
@@ -127,7 +135,6 @@ with col_der:
     st.subheader("📜 Actividad")
     
     if not df_act.empty:
-        # Aquí eliminamos el contador numeral (índice) de la izquierda
         st.dataframe(df_act, use_container_width=True, hide_index=True)
     else:
         st.write("Sin actividad.")
