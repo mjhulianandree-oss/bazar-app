@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Bazar Master Pro v36", layout="wide")
+st.set_page_config(page_title="Bazar Master Pro v37", layout="wide")
 
 st.markdown("""
     <style>
@@ -26,28 +26,21 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_pro_v36.db"
+DB_NAME = "bazar_pro_v37.db"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""CREATE TABLE IF NOT EXISTS inventario (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        producto TEXT UNIQUE, 
-        categoria TEXT, 
-        stock_inicial INTEGER, 
-        precio_costo REAL, 
-        precio_venta REAL, 
-        ventas_acumuladas INTEGER DEFAULT 0)""")
+        id INTEGER PRIMARY KEY AUTOINCREMENT, producto TEXT UNIQUE, categoria TEXT, 
+        stock_inicial INTEGER, precio_costo REAL, precio_venta REAL, ventas_acumuladas INTEGER DEFAULT 0)""")
     
     cursor.execute("""CREATE TABLE IF NOT EXISTS ventas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        nombre_producto TEXT, 
-        categoria TEXT,
-        cantidad INTEGER, 
-        fecha TEXT, 
-        ganancia_vta REAL, 
-        total_vta REAL)""")
+        id INTEGER PRIMARY KEY AUTOINCREMENT, nombre_producto TEXT, categoria TEXT,
+        cantidad INTEGER, fecha TEXT, ganancia_vta REAL, total_vta REAL)""")
+    
+    cursor.execute("""CREATE TABLE IF NOT EXISTS historial_tienda (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, evento TEXT, hora TEXT)""")
     
     cursor.execute("CREATE TABLE IF NOT EXISTS estado_tienda (id INTEGER PRIMARY KEY, abierto INTEGER)")
     cursor.execute("INSERT OR IGNORE INTO estado_tienda (id, abierto) VALUES (1, 0)")
@@ -60,13 +53,15 @@ def get_data():
     conn = sqlite3.connect(DB_NAME)
     inv = pd.read_sql_query("SELECT * FROM inventario", conn)
     vts = pd.read_sql_query("SELECT * FROM ventas", conn)
+    hst = pd.read_sql_query("SELECT * FROM historial_tienda", conn)
     res_est = conn.execute("SELECT abierto FROM estado_tienda WHERE id = 1").fetchone()
     conn.close()
-    return inv, vts, (res_est[0] if res_est else 0)
+    return inv, vts, hst, (res_est[0] if res_est else 0)
 
-df_inv, df_vts, estado_abierto = get_data()
+df_inv, df_vts, df_hst, estado_abierto = get_data()
 abierto = True if estado_abierto == 1 else False
-hora_vta = (datetime.now() - timedelta(hours=4)).strftime("%H:%M")
+# Fecha y Hora para los registros
+ahora = (datetime.now() - timedelta(hours=4)).strftime("%d/%m %H:%M")
 
 # --- 3. CABECERA ---
 st.title("🏪 Bazar Master Pro")
@@ -74,12 +69,16 @@ col1, col2 = st.columns([1, 2])
 with col1:
     if abierto:
         if st.button("🔒 CERRAR TIENDA", use_container_width=True, type="primary"):
-            conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE estado_tienda SET abierto = 0 WHERE id = 1"); conn.commit(); conn.close()
-            st.rerun()
+            conn = sqlite3.connect(DB_NAME)
+            conn.execute("UPDATE estado_tienda SET abierto = 0 WHERE id = 1")
+            conn.execute("INSERT INTO historial_tienda (evento, hora) VALUES (?,?)", ("CERRADO 🔒", ahora))
+            conn.commit(); conn.close(); st.rerun()
     else:
         if st.button("🔓 ABRIR TIENDA", use_container_width=True):
-            conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE estado_tienda SET abierto = 1 WHERE id = 1"); conn.commit(); conn.close()
-            st.rerun()
+            conn = sqlite3.connect(DB_NAME)
+            conn.execute("UPDATE estado_tienda SET abierto = 1 WHERE id = 1")
+            conn.execute("INSERT INTO historial_tienda (evento, hora) VALUES (?,?)", ("ABIERTO 🔓", ahora))
+            conn.commit(); conn.close(); st.rerun()
 with col2:
     st.subheader("🟢 Activo" if abierto else "⚠️ Cerrado")
 
@@ -101,9 +100,9 @@ with st.sidebar:
                 conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
                              (reg_nom.strip().upper(), reg_cat, reg_stk, reg_cst, reg_vta))
                 conn.commit(); conn.close(); st.rerun()
-            except: st.error("Ese producto ya existe.")
+            except: st.error("Ya existe.")
 
-# --- 5. MOSTRADOR SUPERIOR ---
+# --- 5. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
 
 with col_izq:
@@ -113,7 +112,6 @@ with col_izq:
         tabs = st.tabs(categorias_existentes)
         for i, cat in enumerate(categorias_existentes):
             with tabs[i]:
-                # --- BOTONES DE VENTA ---
                 df_cat = df_inv[df_inv['categoria'] == cat]
                 for _, row in df_cat.iterrows():
                     disp = row['stock_inicial'] - row['ventas_acumuladas']
@@ -125,34 +123,51 @@ with col_izq:
                         if c_c.button(f"Venta {row['precio_venta']} Bs", key=f"v_{row['id']}", disabled=not abierto):
                             conn = sqlite3.connect(DB_NAME)
                             conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, ?, 1, ?, ?, ?)", 
-                                         (row['producto'], row['categoria'], hora_vta, row['precio_venta']-row['precio_costo'], row['precio_venta']))
+                                         (row['producto'], row['categoria'], ahora, row['precio_venta']-row['precio_costo'], row['precio_venta']))
                             conn.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (row['id'],))
                             conn.commit(); conn.close(); st.rerun()
                     else:
                         c_c.error("Agotado")
                 
-                # --- HISTORIAL POR SECCIÓN (EN LA PARTE INFERIOR DE CADA PESTAÑA) ---
+                # --- RESUMEN POR SECCIÓN (PARTE INFERIOR DE CADA TAB) ---
                 st.markdown("---")
-                st.subheader(f"📊 Resumen de {cat}")
-                
-                # Filtrar ventas solo de esta categoría
                 df_vts_cat = df_vts[df_vts['categoria'] == cat]
-                
                 if not df_vts_cat.empty:
                     m1, m2, m3 = st.columns(3)
-                    m1.metric("Cant. Vendida", f"{int(df_vts_cat['cantidad'].sum())}")
+                    m1.metric("Ventas", f"{int(df_vts_cat['cantidad'].sum())}")
                     m2.metric("Ganancia", f"{df_vts_cat['ganancia_vta'].sum():.2f} Bs")
-                    m3.metric("Caja Sección", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
-                    
-                    st.write("**Últimas ventas de esta sección:**")
-                    st.table(df_vts_cat.tail(5)[['fecha', 'nombre_producto', 'total_vta']].rename(columns={'total_vta':'Bs'}))
+                    m3.metric("Caja", f"{df_vts_cat['total_vta'].sum():.2f} Bs")
                 else:
-                    st.info("Aún no hay ventas en esta sección.")
+                    st.info(f"Sin ventas en {cat}")
 
 with col_der:
     st.subheader("💰 Resumen Total")
     total_caja = df_vts['total_vta'].sum() if not df_vts.empty else 0.0
     st.metric("Caja General Hoy", f"{total_caja:.2f} Bs")
+    
+    st.write("---")
+    st.subheader("📜 Actividad General")
+    
+    # --- UNIFICAR VENTAS Y EVENTOS DE TIENDA ---
+    # Preparamos los datos de ventas para que coincidan con el historial
     if not df_vts.empty:
-        st.write("**Actividad General:**")
-        st.table(df_vts.tail(8)[['fecha', 'nombre_producto', 'total_vta']])
+        vts_log = df_vts[['fecha', 'nombre_producto', 'total_vta']].copy()
+        vts_log.columns = ['Hora', 'Detalle', 'Monto']
+    else:
+        vts_log = pd.DataFrame(columns=['Hora', 'Detalle', 'Monto'])
+        
+    if not df_hst.empty:
+        hst_log = df_hst[['hora', 'evento']].copy()
+        hst_log['Monto'] = 0.0
+        hst_log.columns = ['Hora', 'Detalle', 'Monto']
+    else:
+        hst_log = pd.DataFrame(columns=['Hora', 'Detalle', 'Monto'])
+        
+    # Combinamos ambos
+    log_completo = pd.concat([vts_log, hst_log]).sort_index(ascending=False)
+    
+    if not log_completo.empty:
+        # Formateamos para que se vea como tabla de registro
+        st.table(log_completo.head(12))
+    else:
+        st.write("No hay actividad registrada.")
