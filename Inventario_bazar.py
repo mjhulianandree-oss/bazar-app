@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Bazar Familiar - Control de Ventas", layout="wide")
 
-# --- BASE DE DATOS (Usamos 'bazar_final.db' para evitar el error de la imagen) ---
+# --- BASE DE DATOS ---
 def init_db():
     conn = sqlite3.connect("bazar_final.db")
     cursor = conn.cursor()
@@ -51,13 +51,11 @@ def registrar_venta(id_prod, nombre_prod, p_venta, p_costo):
     hora_actual = datetime.now() - timedelta(hours=4) 
     fecha_formateada = hora_actual.strftime("%d/%m %H:%M")
     
-    # Guardar en historial
     cursor.execute("""
         INSERT INTO ventas (nombre_producto, cantidad, fecha, ganancia_vta, total_vta) 
         VALUES (?, ?, ?, ?, ?)
     """, (nombre_prod, 1, fecha_formateada, ganancia, p_venta))
     
-    # Actualizar contador de stock individual
     cursor.execute("UPDATE inventario SET ventas_acumuladas = ventas_acumuladas + 1 WHERE id = ?", (id_prod,))
     conn.commit()
     conn.close()
@@ -100,7 +98,6 @@ with col1:
         st.info("Agrega productos para comenzar.")
     else:
         for index, row in df_inv.iterrows():
-            # Lógica corregida: El stock es independiente para cada vez que creas el producto
             stock_actual = row['stock_inicial'] - row['ventas_acumuladas']
             
             c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
@@ -108,7 +105,8 @@ with col1:
             if stock_actual <= 0:
                 c1.markdown(f"🔴 ~~{row['producto']}~~")
                 c2.write("⚠️ Agotado")
-                if c4.button("🗑️", key=f"del_{row['id']}"):
+                # El botón de borrar SOLO aparece aquí cuando el stock es 0 o menor
+                if c4.button("🗑️", key=f"del_{row['id']}", help="Eliminar producto agotado"):
                     borrar_producto(row['id'])
                     st.rerun()
             else:
@@ -117,9 +115,7 @@ with col1:
                 if c3.button(f"Vender {row['precio_venta']} Bs", key=f"vta_{row['id']}"):
                     registrar_venta(row['id'], row['producto'], row['precio_venta'], row['precio_costo'])
                     st.rerun()
-                if c4.button("🗑️", key=f"del_{row['id']}"):
-                    borrar_producto(row['id'])
-                    st.rerun()
+                # Aquí NO ponemos el botón de borrar (c4 queda vacío) para proteger el stock activo
 
 with col2:
     st.subheader("💰 Resumen")
@@ -129,7 +125,6 @@ with col2:
     with st.expander("📝 Historial (Numerado desde 1)", expanded=True):
         if not df_vts.empty:
             df_mostrar = df_vts[['fecha', 'nombre_producto', 'total_vta', 'ganancia_vta']].copy()
-            # Esta línea hace que el contador inicie en 1
             df_mostrar.index = range(1, len(df_mostrar) + 1)
             st.table(df_mostrar.rename(
                 columns={'nombre_producto': 'Producto', 'total_vta': 'Venta', 'ganancia_vta': 'Ganancia'}
