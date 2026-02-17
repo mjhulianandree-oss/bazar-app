@@ -3,12 +3,8 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURACIÓN VISUAL + PARCHE DE VISIBILIDAD DE BARRA LATERAL ---
-st.set_page_config(
-    page_title="Bazar Master Pro", 
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# --- 1. CONFIGURACIÓN VISUAL (ESTRUCTURA DE SEGURIDAD) ---
+st.set_page_config(page_title="Bazar Master Pro", layout="wide")
 
 st.markdown("""
     <style>
@@ -18,20 +14,7 @@ st.markdown("""
     html, body, p, h1, h2, h3, h4, span, label, .stMarkdown { color: #FFFFFF !important; }
     .stInstructions { display: none !important; }
     
-    /* --- PARCHE: HACER EL BOTÓN DE ABRIR BARRA LATERAL MUY VISIBLE --- */
-    [data-testid="collapsedControl"] {
-        background-color: #FF4B4B !important; /* Rojo brillante */
-        border-radius: 0 10px 10px 0 !important;
-        width: 50px !important;
-        height: 50px !important;
-        top: 10px !important;
-    }
-    [data-testid="collapsedControl"] svg {
-        fill: white !important;
-        width: 30px !important;
-        height: 30px !important;
-    }
-
+    /* Diseño de los campos de entrada */
     input, .stSelectbox div[data-baseweb="select"], .stSelectbox select { 
         background-color: #262730 !important; 
         color: #FFFFFF !important; 
@@ -40,6 +23,15 @@ st.markdown("""
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #FFFFFF !important; }
     hr { border-color: #4a4a4a !important; }
     [data-testid="stTable"] { color: white !important; }
+    
+    /* Contenedor especial para el Registro Frontal */
+    .registro-container {
+        background-color: #1E2129;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #4a4a4a;
+        margin-bottom: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -81,8 +73,8 @@ ahora_full = (datetime.now() - timedelta(hours=4)).strftime("%d/%m %H:%M")
 
 # --- 3. CABECERA ---
 st.title("🏪 Bazar Master Pro")
-col1, col2 = st.columns([1, 2])
-with col1:
+col_e1, col_e2 = st.columns([1, 2])
+with col_e1:
     if abierto:
         if st.button("🔒 CERRAR TIENDA", use_container_width=True, type="primary"):
             conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE estado_tienda SET abierto = 0 WHERE id = 1")
@@ -93,21 +85,20 @@ with col1:
             conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE estado_tienda SET abierto = 1 WHERE id = 1")
             conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, "ABIERTO 🔓"))
             conn.commit(); conn.close(); st.rerun()
-with col2:
+with col_e2:
     st.subheader("🟢 Activo" if abierto else "⚠️ Cerrado")
 
-st.divider()
-
-# --- 4. REGISTRO LATERAL ---
-with st.sidebar:
-    st.header("📦 Registro de Productos")
-    with st.form("registro_prod", clear_on_submit=True):
-        reg_nom = st.text_input("Nombre del Producto")
-        reg_cat = st.selectbox("Sección", CATEGORIAS)
-        reg_stk = st.number_input("Stock Inicial", min_value=0, value=0)
-        reg_cst = st.number_input("Costo (Bs)", min_value=0.0, value=0.0)
-        reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=0.0)
-        if st.form_submit_button("💾 GUARDAR PRODUCTO", use_container_width=True):
+# --- 4. REGISTRO FRONTAL (NUEVA UBICACIÓN PARA QUE NO SE OCULTE) ---
+with st.expander("➕ REGISTRAR NUEVO PRODUCTO", expanded=True):
+    with st.form("registro_frontal", clear_on_submit=True):
+        f1, f2, f3, f4, f5 = st.columns([2, 1.5, 1, 1, 1])
+        reg_nom = f1.text_input("Nombre del Producto")
+        reg_cat = f2.selectbox("Sección", CATEGORIAS)
+        reg_stk = f3.number_input("Stock", min_value=0, value=0)
+        reg_cst = f4.number_input("Costo Bs", min_value=0.0, value=0.0)
+        reg_vta = f5.number_input("Venta Bs", min_value=0.0, value=0.0)
+        
+        if st.form_submit_button("💾 GUARDAR EN INVENTARIO", use_container_width=True):
             if reg_nom:
                 nombre_up = reg_nom.strip().upper()
                 conn = sqlite3.connect(DB_NAME)
@@ -121,6 +112,8 @@ with st.sidebar:
                 else:
                     conn.close(); st.warning(f"'{nombre_up}' ya existe.")
 
+st.divider()
+
 # --- 5. MOSTRADOR ---
 col_izq, col_der = st.columns([2.5, 1])
 
@@ -131,13 +124,14 @@ with col_izq:
     for i, cat in enumerate(CATEGORIAS):
         with tabs[i]:
             df_cat = df_inv[df_inv['categoria'] == cat]
+            if df_cat.empty:
+                st.write("No hay productos en esta sección.")
             for _, row in df_cat.iterrows():
                 disp = row['stock_inicial'] - row['ventas_acumuladas']
-                vta_indiv = row['ventas_acumuladas']
                 c_a, c_b, c_input, c_btn_add, c_vta, c_edit = st.columns([2, 0.8, 0.7, 0.5, 1.4, 0.4])
-                c_a.write(f"**{row['producto']}** \n*(V: {int(vta_indiv)})*")
+                c_a.write(f"**{row['producto']}** \n*(V: {int(row['ventas_acumuladas'])})*")
                 c_b.write(f"Tienda: {int(disp)}")
-                add_val = c_input.number_input("Cant", min_value=1, value=1, key=f"num_{row['id']}", label_visibility="collapsed")
+                add_val = c_input.number_input("Cant", min_value=1, value=1, key=f"n_{row['id']}", label_visibility="collapsed")
                 if c_btn_add.button("➕", key=f"add_{row['id']}"):
                     conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + ? WHERE id = ?", (add_val, row['id']))
                     conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, f"STOCK +{add_val}: {row['producto']}"))
@@ -150,17 +144,15 @@ with col_izq:
                         conn.commit(); conn.close(); st.rerun()
                 else: c_vta.error("Agotado")
                 with c_edit:
-                    if st.button("✏️", key=f"pencil_{row['id']}"): st.session_state[f"editing_{row['id']}"] = True
-                if st.session_state.get(f"editing_{row['id']}", False):
+                    if st.button("✏️", key=f"p_{row['id']}"): st.session_state[f"ed_{row['id']}"] = True
+                if st.session_state.get(f"ed_{row['id']}", False):
                     with st.expander(f"Editar: {row['producto']}", expanded=True):
                         e1, e2 = st.columns(2)
-                        new_cat = e1.selectbox("Sección:", CATEGORIAS, index=CATEGORIAS.index(cat), key=f"newcat_{row['id']}")
-                        new_price = e2.number_input("Venta:", min_value=0.0, value=row['precio_venta'], key=f"newprice_{row['id']}")
-                        b1, b2 = st.columns(2)
-                        if b1.button("✅ Ok", key=f"ok_{row['id']}"):
+                        new_cat = e1.selectbox("Sección:", CATEGORIAS, index=CATEGORIAS.index(cat), key=f"nc_{row['id']}")
+                        new_price = e2.number_input("Precio:", min_value=0.0, value=row['precio_venta'], key=f"np_{row['id']}")
+                        if st.button("✅ Ok", key=f"ok_{row['id']}"):
                             conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE inventario SET categoria = ?, precio_venta = ? WHERE id = ?", (new_cat, new_price, row['id']))
-                            conn.commit(); conn.close(); st.session_state[f"editing_{row['id']}"] = False; st.rerun()
-                        if b2.button("❌", key=f"can_{row['id']}"): st.session_state[f"editing_{row['id']}"] = False; st.rerun()
+                            conn.commit(); conn.close(); st.session_state[f"ed_{row['id']}"] = False; st.rerun()
 
     with tabs[-1]:
         st.subheader("📊 Control Maestro de Stock")
@@ -169,9 +161,9 @@ with col_izq:
                 tienda = row['stock_inicial'] - row['ventas_acumuladas']
                 c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
                 c1.write(f"**{row['producto']}**")
-                c2.write(f"Hay: {int(tienda)}")
-                n_stk = c3.number_input(f"Add", min_value=1, value=1, key=f"inv_n_{row['id']}", label_visibility="collapsed")
-                if c4.button("➕", key=f"bi_{row['id']}"):
+                c2.write(f"Tienda: {int(tienda)}")
+                n_stk = c3.number_input(f"Add", min_value=1, value=1, key=f"in_{row['id']}", label_visibility="collapsed")
+                if c4.button("➕ Stock", key=f"bi_{row['id']}"):
                     conn = sqlite3.connect(DB_NAME); conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + ? WHERE id = ?", (n_stk, row['id']))
                     conn.commit(); conn.close(); st.rerun()
 
@@ -179,8 +171,8 @@ with col_der:
     st.subheader("💰 Balance")
     total_caja = df_vts['total_vta'].sum() if not df_vts.empty else 0.0
     mc1, mc2 = st.columns(2)
-    mc1.metric("Caja", f"{total_caja:.2f}")
-    mc2.metric("Ganancia", f"{df_vts['ganancia_vta'].sum():.2f}")
+    mc1.metric("Caja", f"{total_caja:.2f} Bs")
+    mc2.metric("Ganancia", f"{df_vts['ganancia_vta'].sum():.2f} Bs")
     st.write("---")
     st.subheader("📜 Actividad")
     if not df_act.empty:
