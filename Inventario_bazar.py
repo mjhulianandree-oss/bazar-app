@@ -17,11 +17,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. BASE DE DATOS (Actualizada con UNIQUE) ---
+# --- 3. BASE DE DATOS (NUEVA VERSIÓN V9 PARA EMPEZAR DE 0) ---
 def init_db():
-    conn = sqlite3.connect("bazar_master_v7.db")
+    # Al cambiar el nombre del archivo .db, toda la información anterior desaparece
+    conn = sqlite3.connect("bazar_master_v9.db")
     cursor = conn.cursor()
-    # Agregamos UNIQUE al producto para que la base de datos no acepte repetidos
+    # "producto TEXT UNIQUE" impide que existan dos nombres iguales
     cursor.execute("""CREATE TABLE IF NOT EXISTS inventario (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         producto TEXT UNIQUE, 
@@ -44,21 +45,21 @@ def init_db():
     conn.close()
 
 def registrar_evento(mensaje):
-    conn = sqlite3.connect("bazar_master_v7.db")
+    conn = sqlite3.connect("bazar_master_v9.db")
     hora = (datetime.now() - timedelta(hours=4)).strftime("%d/%m %H:%M")
     conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, 'SISTEMA', 0, ?, 0, 0)", (mensaje, hora))
     conn.commit()
     conn.close()
 
 def cambiar_estado(abrir):
-    conn = sqlite3.connect("bazar_master_v7.db")
+    conn = sqlite3.connect("bazar_master_v9.db")
     conn.execute("UPDATE estado_tienda SET abierto = ? WHERE id = 1", (1 if abrir else 0,))
     conn.commit()
     conn.close()
     registrar_evento("🟢 TIENDA ABIERTA" if abrir else "🔴 TIENDA CERRADA")
 
 def registrar_venta(id_prod, nombre_prod, cat, p_venta, p_costo):
-    conn = sqlite3.connect("bazar_master_v7.db")
+    conn = sqlite3.connect("bazar_master_v9.db")
     ganancia = p_venta - p_costo
     fecha = (datetime.now() - timedelta(hours=4)).strftime("%d/%m %H:%M")
     conn.execute("INSERT INTO ventas (nombre_producto, categoria, cantidad, fecha, ganancia_vta, total_vta) VALUES (?, ?, 1, ?, ?, ?)", (nombre_prod, cat, fecha, ganancia, p_venta))
@@ -69,7 +70,7 @@ def registrar_venta(id_prod, nombre_prod, cat, p_venta, p_costo):
 init_db()
 
 # --- 4. CARGA DE DATOS ---
-conn = sqlite3.connect("bazar_master_v7.db")
+conn = sqlite3.connect("bazar_master_v9.db")
 df_inv = pd.read_sql_query("SELECT * FROM inventario", conn)
 df_vts = pd.read_sql_query("SELECT * FROM ventas ORDER BY id ASC", conn)
 estado_actual = conn.execute("SELECT abierto FROM estado_tienda WHERE id = 1").fetchone()[0]
@@ -92,10 +93,10 @@ with c_info:
 
 st.divider()
 
-# --- 6. SIDEBAR (Con validación de duplicados) ---
+# --- 6. SIDEBAR (PROTECCIÓN DE DUPLICADOS) ---
 with st.sidebar:
     st.header("📦 Registro")
-    n_nom = st.text_input("Nombre")
+    n_nom = st.text_input("Nombre del Producto")
     n_cat = st.selectbox("Sección", ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
     n_stk = st.number_input("Stock", min_value=1, value=10)
     n_cst = st.number_input("Costo unitario", min_value=0.1, value=1.0)
@@ -103,19 +104,19 @@ with st.sidebar:
     
     if st.button("Guardar"):
         if n_nom:
-            # Quitamos espacios de más y pasamos a mayúsculas para comparar mejor
-            nombre_limpio = n_nom.strip()
+            # Limpiamos el nombre para que no haya errores por un espacio extra
+            nombre_final = n_nom.strip()
             try:
-                conn = sqlite3.connect("bazar_master_v7.db")
+                conn = sqlite3.connect("bazar_master_v9.db")
                 conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
-                             (nombre_limpio, n_cat, n_stk, n_cst, n_vta))
+                             (nombre_final, n_cat, n_stk, n_cst, n_vta))
                 conn.commit()
                 conn.close()
-                st.success(f"✅ {nombre_limpio} guardado.")
+                st.success(f"✅ {nombre_final} guardado correctamente.")
                 st.rerun()
             except sqlite3.IntegrityError:
-                # Si el nombre ya existe, salta este error
-                st.warning(f"⚠️ El producto '{nombre_limpio}' ya existe en el inventario.")
+                # Este error ocurre si el nombre ya existe en la columna UNIQUE
+                st.error(f"❌ Error: El producto '{nombre_final}' ya existe. No puedes repetirlo.")
                 conn.close()
 
 # --- 7. MOSTRADOR ---
@@ -141,7 +142,7 @@ with c_inv:
                     with col4.popover("➕"):
                         cant = st.number_input("Surtir", min_value=1, value=10, key=f"s_{row['id']}")
                         if st.button("Ok", key=f"bs_{row['id']}"):
-                            conn = sqlite3.connect("bazar_master_v7.db")
+                            conn = sqlite3.connect("bazar_master_v9.db")
                             conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + ? WHERE id = ?", (cant, row['id']))
                             conn.commit(); conn.close(); st.rerun()
 
@@ -191,4 +192,3 @@ if not v_prods.empty:
             st.write(f"Ganancia: {row_cat['ganancia_vta']:.2f} Bs")
 else:
     st.write("Aún no hay registros de ventas.")
-
