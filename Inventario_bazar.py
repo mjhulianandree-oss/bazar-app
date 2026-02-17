@@ -48,7 +48,7 @@ def get_data():
     conn = sqlite3.connect(DB_NAME)
     inv = pd.read_sql_query("SELECT * FROM inventario", conn)
     vts = pd.read_sql_query("SELECT * FROM ventas", conn)
-    act = pd.read_sql_query("SELECT hora, detalle FROM log_actividad ORDER BY id DESC LIMIT 20", conn)
+    act = pd.read_sql_query("SELECT hora as 'Hora', detalle as 'Detalle' FROM log_actividad ORDER BY id DESC LIMIT 20", conn)
     res_est = conn.execute("SELECT abierto FROM estado_tienda WHERE id = 1").fetchone()
     conn.close()
     return inv, vts, act, (res_est[0] if res_est else 0)
@@ -78,7 +78,7 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (Sidebar) ---
+# --- 4. REGISTRO (Sidebar con corrección de duplicados) ---
 with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
@@ -89,12 +89,16 @@ with st.sidebar:
         reg_vta = st.number_input("Venta (Bs)", min_value=0.0, value=1.5)
         if st.form_submit_button("💾 GUARDAR", use_container_width=True):
             if reg_nom:
-                try:
-                    conn = sqlite3.connect(DB_NAME)
+                nombre_up = reg_nom.strip().upper()
+                conn = sqlite3.connect(DB_NAME)
+                existe = conn.execute("SELECT 1 FROM inventario WHERE producto = ?", (nombre_up,)).fetchone()
+                if not existe:
                     conn.execute("INSERT INTO inventario (producto, categoria, stock_inicial, precio_costo, precio_venta) VALUES (?,?,?,?,?)", 
-                                 (reg_nom.strip().upper(), reg_cat, reg_stk, reg_cst, reg_vta))
+                                 (nombre_up, reg_cat, reg_stk, reg_cst, reg_vta))
                     conn.commit(); conn.close(); st.rerun()
-                except: st.error("Ya existe.")
+                else:
+                    conn.close()
+                    st.warning(f"El producto '{nombre_up}' ya existe.")
 
 # --- 5. MOSTRADOR ---
 col_izq, col_der = st.columns([2.2, 1.2])
@@ -108,13 +112,11 @@ with col_izq:
                 df_cat = df_inv[df_inv['categoria'] == cat]
                 for _, row in df_cat.iterrows():
                     disp = row['stock_inicial'] - row['ventas_acumuladas']
-                    # Agregamos una columna extra para el botón +
                     c_a, c_b, c_plus, c_c = st.columns([2.5, 1, 0.5, 2])
                     
                     c_a.write(f"**{row['producto']}**")
                     c_b.write(f"Stock: {int(disp)}")
                     
-                    # Botón para aumentar Stock (+)
                     if c_plus.button("➕", key=f"add_{row['id']}"):
                         conn = sqlite3.connect(DB_NAME)
                         conn.execute("UPDATE inventario SET stock_inicial = stock_inicial + 1 WHERE id = ?", (row['id'],))
@@ -131,7 +133,6 @@ with col_izq:
                             conn.commit(); conn.close(); st.rerun()
                     else: c_c.error("Agotado")
                 
-                # Resumen de sección (CONTADOR QUE SOLICITASTE MANTENER)
                 st.markdown("---")
                 df_vts_cat = df_vts[df_vts['categoria'] == cat]
                 if not df_vts_cat.empty:
@@ -147,6 +148,7 @@ with col_der:
     st.subheader("📜 Actividad")
     
     if not df_act.empty:
-        st.table(df_act)
+        # AQUÍ SE ELIMINÓ EL CONTADOR NUMERAL DE LA IZQUIERDA
+        st.dataframe(df_act, use_container_width=True, hide_index=True)
     else:
         st.write("Sin actividad.")
