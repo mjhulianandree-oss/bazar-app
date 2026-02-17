@@ -20,7 +20,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. BASE DE DATOS ---
-DB_NAME = "bazar_v50_final.db"
+DB_NAME = "bazar_v51_final.db"
 CATEGORIAS = ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"]
 
 def init_db():
@@ -74,7 +74,7 @@ with col2:
 
 st.divider()
 
-# --- 4. REGISTRO (PARCHE 2: SOLUCIÓN ERROR YA EXISTE) ---
+# --- 4. REGISTRO ---
 with st.sidebar:
     st.header("📦 Registro")
     with st.form("registro_prod", clear_on_submit=True):
@@ -97,7 +97,7 @@ with st.sidebar:
                     conn.close(); st.warning(f"'{nombre_up}' ya existe.")
 
 # --- 5. MOSTRADOR ---
-col_izq, col_der = st.columns([2.4, 1])
+col_izq, col_der = st.columns([2.5, 1])
 
 with col_izq:
     st.subheader("🛒 Panel de Ventas")
@@ -110,8 +110,8 @@ with col_izq:
                     disp = row['stock_inicial'] - row['ventas_acumuladas']
                     vta_indiv = row['ventas_acumuladas']
                     
-                    # Columnas: Producto | Tienda | Cant | Botón+ | Botón Venta | Editar
-                    c_a, c_b, c_input, c_btn_add, c_vta, c_edit = st.columns([2.2, 1, 0.7, 0.6, 1.4, 0.5])
+                    # Fila Principal
+                    c_a, c_b, c_input, c_btn_add, c_vta, c_edit = st.columns([2, 0.8, 0.7, 0.5, 1.4, 0.4])
                     
                     c_a.write(f"**{row['producto']}** \n*(V: {int(vta_indiv)})*")
                     c_b.write(f"Tienda: {int(disp)}")
@@ -139,15 +139,23 @@ with col_izq:
                     with c_edit:
                         if st.button("✏️", key=f"pencil_{row['id']}"):
                             st.session_state[f"editing_{row['id']}"] = True
-                        
-                        if st.session_state.get(f"editing_{row['id']}", False):
-                            new_cat = st.selectbox("Sección", CATEGORIAS, index=CATEGORIAS.index(cat), key=f"newcat_{row['id']}")
-                            if st.button("OK", key=f"ok_{row['id']}"):
-                                if new_cat != cat:
-                                    conn = sqlite3.connect(DB_NAME)
-                                    conn.execute("UPDATE inventario SET categoria = ? WHERE id = ?", (new_cat, row['id']))
-                                    conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, f"MOVIDO: {row['producto']} a {new_cat}"))
-                                    conn.commit(); conn.close()
+                    
+                    # PANEL DE EDICIÓN (Se abre debajo al tocar el lápiz)
+                    if st.session_state.get(f"editing_{row['id']}", False):
+                        with st.expander(f"Editar: {row['producto']}", expanded=True):
+                            e1, e2 = st.columns(2)
+                            new_cat = e1.selectbox("Mover a sección:", CATEGORIAS, index=CATEGORIAS.index(cat), key=f"newcat_{row['id']}")
+                            new_price = e2.number_input("Nuevo Precio Venta (Bs):", min_value=0.0, value=row['precio_venta'], key=f"newprice_{row['id']}")
+                            
+                            b1, b2 = st.columns([1,1])
+                            if b1.button("✅ Aplicar", key=f"ok_{row['id']}", use_container_width=True):
+                                conn = sqlite3.connect(DB_NAME)
+                                conn.execute("UPDATE inventario SET categoria = ?, precio_venta = ? WHERE id = ?", (new_cat, new_price, row['id']))
+                                conn.execute("INSERT INTO log_actividad (hora, detalle) VALUES (?,?)", (ahora_full, f"EDITADO: {row['producto']}"))
+                                conn.commit(); conn.close()
+                                st.session_state[f"editing_{row['id'] Shelly}"] = False
+                                st.rerun()
+                            if b2.button("❌", key=f"cancel_{row['id']}", use_container_width=True):
                                 st.session_state[f"editing_{row['id']}"] = False
                                 st.rerun()
 
@@ -164,15 +172,12 @@ with col_der:
     st.subheader("💰 Balance Hoy")
     total_caja = df_vts['total_vta'].sum() if not df_vts.empty else 0.0
     total_ganancia = df_vts['ganancia_vta'].sum() if not df_vts.empty else 0.0
-    
     mc1, mc2 = st.columns(2)
     mc1.metric("Caja General", f"{total_caja:.2f} Bs")
     mc2.metric("Ganancia Total", f"{total_ganancia:.2f} Bs")
-    
     st.write("---")
     st.subheader("📜 Actividad")
     if not df_act.empty:
-        # PARCHE 1: SE OCULTA EL CONTADOR NUMERAL
         st.dataframe(df_act, use_container_width=True, hide_index=True)
     else:
         st.write("Sin actividad.")
