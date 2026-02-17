@@ -6,11 +6,10 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Bazar Familiar - Control de Ventas", layout="wide")
 
-# --- BASE DE DATOS (Versión 3 - Sin IDs visibles y nombres permanentes) ---
+# --- BASE DE DATOS (v3) ---
 def init_db():
     conn = sqlite3.connect("bazar_v3.db")
     cursor = conn.cursor()
-    # Inventario
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventario (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,7 +19,6 @@ def init_db():
             precio_venta REAL
         )
     """)
-    # Ventas: Guarda el nombre directamente para que no se borre
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ventas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,7 +93,6 @@ with col1:
         st.info("Agrega productos para comenzar.")
     else:
         for index, row in df_inv.iterrows():
-            # Cálculo de stock basado en el nombre (permanente)
             v_hechas = df_vts[df_vts['nombre_producto'] == row['producto']]['cantidad'].sum()
             stock_actual = row['stock_inicial'] - v_hechas
             
@@ -122,8 +119,15 @@ with col2:
     ganancia_total = df_vts['ganancia_vta'].sum()
     st.metric("Ganancia Total", f"{ganancia_total:.2f} Bs")
     
-    if st.checkbox("Ver historial detallado"):
-        # Mostramos la tabla formateada y SIN la columna ID
-        st.table(df_vts[['fecha', 'nombre_producto', 'total_vta', 'ganancia_vta']].rename(
-            columns={'nombre_producto': 'Producto', 'total_vta': 'Venta', 'ganancia_vta': 'Ganancia'}
-        ))
+    # HISTORIAL: Usamos un expander que inicia abierto (expanded=True)
+    with st.expander("📝 Historial Detallado", expanded=True):
+        if not df_vts.empty:
+            # Crear una columna de índice que empiece en 1
+            df_mostrar = df_vts[['fecha', 'nombre_producto', 'total_vta', 'ganancia_vta']].copy()
+            df_mostrar.index = range(1, len(df_mostrar) + 1)
+            
+            st.table(df_mostrar.rename(
+                columns={'nombre_producto': 'Producto', 'total_vta': 'Venta', 'ganancia_vta': 'Ganancia'}
+            ))
+        else:
+            st.write("No hay ventas registradas.")
