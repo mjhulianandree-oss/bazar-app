@@ -6,17 +6,7 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Bazar Pro - Secciones", layout="wide")
 
-# --- BLOQUEO VISUAL (Ocultar Menú y "Made with Streamlit") ---
-hide_st_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            </style>
-            """
-st.markdown(hide_st_style, unsafe_allow_html=True)
-
-# --- BASE DE DATOS ---
+# --- BASE DE DATOS (v4 con Categorías) ---
 def init_db():
     conn = sqlite3.connect("bazar_secciones.db")
     cursor = conn.cursor()
@@ -75,6 +65,7 @@ with st.sidebar:
     st.header("📦 Nuevo Producto")
     nuevo_nombre = st.text_input("Nombre del Producto")
     
+    # NUEVO: Selección de Categoría
     categoria = st.selectbox("Sección/Categoría", 
                             ["🍭 Dulces y Snacks", "🥤 Bebidas/Líquidos", "🥛 Lácteos", "📝 Escolar/Académico", "🏠 Otros"])
     
@@ -112,6 +103,7 @@ with col1:
     if df_inv.empty:
         st.info("Agrega productos en la barra lateral.")
     else:
+        # CREAR PESTAÑAS SEGÚN LAS CATEGORÍAS QUE EXISTEN
         categorias_reales = df_inv['categoria'].unique().tolist()
         tabs = st.tabs(categorias_reales)
         
